@@ -277,6 +277,11 @@ class PresentationMaker:
                 value = data_item.get("value", "")
                 description = data_item.get("description", "")
                 
+                # 檢查是否為第二頁（提案風格概述）
+                is_second_page = (value == "提案風格概述" and 
+                                "topic1" in data_item and 
+                                "summary1" in data_item)
+                
                 # 跳過空值
                 if not value:
                     continue
@@ -369,6 +374,141 @@ class PresentationMaker:
                     text_box.fill.background()  # 透明背景
                     text_box.line.fill.background()  # 無邊框
                 
+                elif is_second_page:
+                    # 第二頁 - 提案風格概述 - 特殊版型
+                    print(f"處理第二頁特殊版型...")
+                    
+                    # 添加滿版背景圖片
+                    slide_width_px = 1920
+                    slide_height_px = 1080
+                    
+                    processed_image = self.resize_image_to_fit(
+                        pil_image, 
+                        slide_width_px, 
+                        slide_height_px, 
+                        maintain_aspect=False
+                    )
+                    
+                    # 添加背景圖片
+                    self.add_image_to_slide(
+                        slide, processed_image, 
+                        0, 0, 
+                        prs.slide_width, prs.slide_height
+                    )
+                    
+                    # 添加標題（上方）- 使用與第三頁相同的樣式
+                    title_box = slide.shapes.add_textbox(
+                        Inches(1), Inches(0.5),
+                        Inches(11.33), Inches(1)
+                    )
+                    title_frame = title_box.text_frame
+                    title_frame.clear()
+                    title_frame.margin_left = Inches(0.2)
+                    title_frame.margin_right = Inches(0.2)
+                    title_frame.margin_top = Inches(0.2)
+                    title_frame.margin_bottom = Inches(0.2)
+                    
+                    title_p = title_frame.add_paragraph()
+                    title_p.text = str(value)
+                    title_p.alignment = PP_ALIGN.CENTER
+                    title_p.font.size = Pt(36)
+                    title_p.font.color.rgb = RGBColor(*template_config["title_color"])
+                    title_p.font.bold = True
+                    
+                    # 設定文字框背景透明
+                    title_box.fill.background()
+                    title_box.line.fill.background()
+                    
+                    # 計算四個文字框的位置 (2x2 格局) - 更居中的配置
+                    box_width = Inches(5.4)
+                    box_height = Inches(2.2)
+                    margin_x = Inches(0.3)  # 減少左右邊距
+                    margin_y = Inches(0.3)
+                    start_y = Inches(2.2)
+                    
+                    # 計算總寬度以實現居中
+                    total_width = 2 * box_width + margin_x  # 兩個框的寬度 + 中間間距
+                    start_x = (prs.slide_width - total_width) / 2  # 居中起始位置
+                    
+                    topics = [
+                        data_item.get("topic1", ""),
+                        data_item.get("topic2", ""),
+                        data_item.get("topic3", ""),
+                        data_item.get("topic4", "")
+                    ]
+                    
+                    summaries = [
+                        data_item.get("summary1", ""),
+                        data_item.get("summary2", ""),
+                        data_item.get("summary3", ""),
+                        data_item.get("summary4", "")
+                    ]
+                    
+                    # 創建四個圓角文字框
+                    for idx, (topic, summary) in enumerate(zip(topics, summaries)):
+                        row = idx // 2
+                        col = idx % 2
+                        
+                        box_left = start_x + col * (box_width + margin_x)
+                        box_top = start_y + row * (box_height + margin_y)
+                        
+                        # 創建普通矩形背景框（簡化版，移除圓角）
+                        bg_box = slide.shapes.add_shape(
+                            MSO_SHAPE.RECTANGLE,
+                            box_left, box_top,
+                            box_width, box_height
+                        )
+                        bg_box.fill.solid()
+                        bg_box.fill.fore_color.rgb = RGBColor(255, 255, 255)  # 白色背景
+                        bg_box.line.color.rgb = RGBColor(*template_config["accent_color"])
+                        bg_box.line.width = Pt(2)
+                        
+                        # 添加標題文字
+                        title_text_box = slide.shapes.add_textbox(
+                            box_left + Inches(0.2), box_top + Inches(0.2),
+                            box_width - Inches(0.4), Inches(0.6)
+                        )
+                        title_text_frame = title_text_box.text_frame
+                        title_text_frame.clear()
+                        title_text_frame.margin_left = Inches(0.1)
+                        title_text_frame.margin_right = Inches(0.1)
+                        title_text_frame.margin_top = Inches(0.05)
+                        title_text_frame.margin_bottom = Inches(0.05)
+                        
+                        title_text_p = title_text_frame.add_paragraph()
+                        title_text_p.text = str(topic)
+                        title_text_p.alignment = PP_ALIGN.CENTER
+                        title_text_p.font.size = Pt(18)
+                        title_text_p.font.color.rgb = RGBColor(*template_config["title_color"])
+                        title_text_p.font.bold = True
+                        
+                        title_text_box.fill.background()
+                        title_text_box.line.fill.background()
+                        
+                        # 移除連接線，直接添加內容文字（調整位置更靠近標題）
+                        content_text_box = slide.shapes.add_textbox(
+                            box_left + Inches(0.2), box_top + Inches(0.9),
+                            box_width - Inches(0.4), box_height - Inches(1.1)
+                        )
+                        content_text_frame = content_text_box.text_frame
+                        content_text_frame.clear()
+                        content_text_frame.margin_left = Inches(0.1)
+                        content_text_frame.margin_right = Inches(0.1)
+                        content_text_frame.margin_top = Inches(0.05)
+                        content_text_frame.margin_bottom = Inches(0.05)
+                        content_text_frame.word_wrap = True
+                        
+                        content_text_p = content_text_frame.add_paragraph()
+                        content_text_p.text = str(summary)
+                        content_text_p.alignment = PP_ALIGN.LEFT
+                        content_text_p.font.size = Pt(14)
+                        content_text_p.font.color.rgb = RGBColor(*template_config["content_color"])
+                        content_text_p.line_spacing = 1.2
+                        
+                        content_text_box.fill.background()
+                        content_text_box.line.fill.background()
+                
+                
                 else:
                     print(f"處理內容頁 {i+1}，保持原圖尺寸...")
                     # 內容頁 - 左右排列，保持原圖尺寸
@@ -418,11 +558,30 @@ class PresentationMaker:
                     content_frame = content_box.text_frame
                     content_frame.word_wrap = True
                     
-                    content_p = content_frame.add_paragraph()
-                    content_p.text = str(description) if description else ""
-                    content_p.font.size = Pt(16)
-                    content_p.font.color.rgb = RGBColor(*template_config["content_color"])
-                    content_p.line_spacing = 1.5
+                    # 增加字體大小以減少留白，並添加段落分隔
+                    if description:
+                        # 將描述文字分成段落，每個句號後添加段落分隔
+                        description_text = str(description)
+                        sentences = description_text.split('。')
+                        
+                        for idx, sentence in enumerate(sentences):
+                            if sentence.strip():  # 忽略空字串
+                                content_p = content_frame.add_paragraph()
+                                content_p.text = sentence.strip() + ('。' if idx < len(sentences) - 1 and sentence.strip() else '')
+                                content_p.font.size = Pt(18)  # 從16增加到18
+                                content_p.font.color.rgb = RGBColor(*template_config["content_color"])
+                                content_p.line_spacing = 1.6
+                                
+                                # 段落間距
+                                if idx < len(sentences) - 1:
+                                    content_p.space_after = Pt(8)
+                    else:
+                        # 備用的空內容
+                        content_p = content_frame.add_paragraph()
+                        content_p.text = ""
+                        content_p.font.size = Pt(18)
+                        content_p.font.color.rgb = RGBColor(*template_config["content_color"])
+                        content_p.line_spacing = 1.6
             
             # 確保輸出目錄存在
             output_dir = os.path.dirname(output_file)

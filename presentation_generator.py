@@ -50,6 +50,10 @@ class PresentationGenerator:
             "required": {
                 "api_key": ("STRING", {"default": saved_key, "placeholder": "輸入Gemini API Key (會自動儲存)"}),
                 "model": (["gemini-2.5-pro", "gemini-2.5-flash"], {"default": "gemini-2.5-flash"}),
+                "design_style": ([
+                    "現代簡約風", "工業風", "自然風", "北歐風", "日式和風", 
+                    "美式鄉村風", "法式古典風", "地中海風", "復古風", "新中式風"
+                ], {"default": "現代簡約風"}),
                 "image": ("IMAGE",),
             }
         }
@@ -61,7 +65,7 @@ class PresentationGenerator:
     FUNCTION = "generate_presentation"
     CATEGORY = "presentation"
     
-    def generate_presentation(self, api_key, model, image):
+    def generate_presentation(self, api_key, model, design_style, image):
         try:
             # 儲存API Key以供下次使用
             if api_key and api_key != self.get_saved_api_key():
@@ -92,9 +96,9 @@ class PresentationGenerator:
             pil_image.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
             
-            # 優化後的提示詞，限制副標題長度
-            prompt = """
-請您作為專業室內設計師，仔細分析此平面圖並輸出一個完整的JSON檔案，用於製作室內裝修提案簡報。
+            # 優化後的提示詞，加入第二頁特殊格式和裝修風格
+            prompt = f"""
+請您作為專業室內設計師，仔細分析此平面圖並以「{design_style}」為主要設計風格，輸出一個完整的JSON檔案，用於製作室內裝修提案簡報。
 
 JSON結構要求：
 1. 第一頁（主題頁）：
@@ -102,23 +106,36 @@ JSON結構要求：
    - description: 簡短描述整體設計風格（限制15個字以內，如"現代簡約風格居家空間"）
    - image: 代表性房間的英文風格提示詞（80個token內）
 
-2. 中間頁面（各房間）：
+2. 第二頁（提案風格概述）：
+   - value: "提案風格概述"
+   - description: "{design_style}風格特色說明"
+   - topic1: "動線規劃說明"
+   - summary1: 針對此平面圖的動線規劃分析（35字內）
+   - topic2: "設計主軸概念"
+   - summary2: {design_style}的核心設計理念（35字內）
+   - topic3: "色彩與材質概念"
+   - summary3: {design_style}的色彩搭配和材質選擇（35字內）
+   - topic4: "空間機能規劃說明"
+   - summary4: 根據平面圖的機能空間配置說明（35字內）
+   - image: {design_style}風格的整體空間英文提示詞（80個token內）
+
+3. 中間頁面（各房間）：
    - value: 房間類型的中文名稱（如"客廳"、"主臥室"等）
    - description: 詳細的中文裝修風格說明，包含色彩、材質、配置建議
    - image: 對應的英文ComfyUI圖片生成提示詞（80個token內）
 
-3. 最後一頁（結尾頁）：
+4. 最後一頁（結尾頁）：
    - value: "謝謝聆聽本次簡報"
    - description: 風格總結與核心價值（限制15個字以內，如"打造舒適宜人居住環境"）
    - image: 整體空間感的英文提示詞（80個token內）
 
 重要限制：
-- 第一頁和最後一頁的description必須控制在15個中文字以內，避免簡報跑版
+- 第一頁和最後一頁的description必須控制在15個中文字以內
+- 第二頁的四個summary必須各自控制在35個中文字以內
 - 請根據平面圖中的實際房間配置和大小比例進行分析
-- 確保所有房間的設計風格統一協調
+- 確保所有房間的設計風格統一為「{design_style}」
 - 英文提示詞需精準且具體，適合AI圖像生成
 - 中文描述要專業且易懂，包含實用的裝修建議
-- 不需要描述具體尺寸數字，重點在於空間配置和風格營造
 
 請直接輸出JSON格式，不需要其他說明文字。
 """
