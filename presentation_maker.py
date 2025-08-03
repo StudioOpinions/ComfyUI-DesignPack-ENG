@@ -552,7 +552,7 @@ class PresentationMaker:
                     
                     # 添加內容 (左下)
                     content_box = slide.shapes.add_textbox(
-                        Inches(0.5), Inches(2),
+                        Inches(0.5), Inches(1.6),
                         Inches(6.5), Inches(4.5)
                     )
                     content_frame = content_box.text_frame
@@ -568,20 +568,20 @@ class PresentationMaker:
                             if sentence.strip():  # 忽略空字串
                                 content_p = content_frame.add_paragraph()
                                 content_p.text = sentence.strip() + ('。' if idx < len(sentences) - 1 and sentence.strip() else '')
-                                content_p.font.size = Pt(18)  # 從16增加到18
+                                content_p.font.size = Pt(17)  # 從16增加到17
                                 content_p.font.color.rgb = RGBColor(*template_config["content_color"])
-                                content_p.line_spacing = 1.6
+                                content_p.line_spacing = 1.3
                                 
                                 # 段落間距
                                 if idx < len(sentences) - 1:
-                                    content_p.space_after = Pt(8)
+                                    content_p.space_after = Pt(6)
                     else:
                         # 備用的空內容
                         content_p = content_frame.add_paragraph()
                         content_p.text = ""
-                        content_p.font.size = Pt(18)
+                        content_p.font.size = Pt(17)
                         content_p.font.color.rgb = RGBColor(*template_config["content_color"])
-                        content_p.line_spacing = 1.6
+                        content_p.line_spacing = 1.4
             
             # 確保輸出目錄存在
             output_dir = os.path.dirname(output_file)
