@@ -121,7 +121,7 @@ JSON結構要求：
      - room_name: 房間中文名稱
      - page_number: 頁碼
      - highlight: 重點特色（限制10個中文字）
-   - image_prompt: 整體平面圖概覽的英文提示詞（80個token內）
+   - image_prompt: 整體設計概念的英文提示詞（80個token內，不包含平面圖）
 
 3. 風格介紹頁（Style Overview）：
    - page_type: "style_overview"
@@ -265,6 +265,7 @@ class PDFMagazineMaker:
             "required": {
                 "images": ("IMAGE",),
                 "json_data": ("STRING",),
+                "floorplanimage": ("IMAGE",),
                 "template": (["經典雜誌", "現代簡約", "時尚風格", "專業商務", "溫馨居家"], {"default": "經典雜誌"}),
                 "layout": (["版型A-經典佈局", "版型B-滿版圖文", "版型C-藝術拼貼"], {"default": "版型A-經典佈局"}),
                 "font": (font_files, {"default": font_files[0] if font_files else "default"}),
@@ -272,7 +273,7 @@ class PDFMagazineMaker:
             }
         }
     
-    INPUT_IS_LIST = (True, False, False, False, False, False)  # (images, json_data, template, layout, font, output_path)
+    INPUT_IS_LIST = (True, False, False, False, False, False, False)  # (images, json_data, floorplanimage, template, layout, font, output_path)
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("result",)
     
@@ -365,6 +366,44 @@ class PDFMagazineMaker:
             # 創建一個默認圖片
             return Image.new('RGB', (1088, 960), color='lightgray')
     
+    def resize_floorplan_for_layout(self, pil_image, max_width_mm, max_height_mm):
+        """調整平面圖尺寸但保持原始比例，不進行裁切"""
+        try:
+            width, height = pil_image.size
+            
+            # 簡化計算，直接使用mm單位
+            aspect_ratio = width / height
+            target_aspect = max_width_mm / max_height_mm
+            
+            if aspect_ratio > target_aspect:
+                # 寬度是限制因素
+                final_width_mm = max_width_mm
+                final_height_mm = max_width_mm / aspect_ratio
+            else:
+                # 高度是限制因素
+                final_height_mm = max_height_mm
+                final_width_mm = max_height_mm * aspect_ratio
+            
+            # 限制最大尺寸避免記憶體問題
+            max_pixel_size = 2000
+            scale_factor = min(max_pixel_size / width, max_pixel_size / height, 1.0)
+            
+            new_width = int(width * scale_factor)
+            new_height = int(height * scale_factor)
+            
+            if scale_factor < 1.0:
+                resized_image = pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                print(f"平面圖縮小: {width}x{height} -> {new_width}x{new_height}")
+            else:
+                resized_image = pil_image
+                print(f"平面圖保持原始尺寸: {width}x{height}")
+            
+            return resized_image, final_width_mm, final_height_mm
+            
+        except Exception as e:
+            print(f"平面圖調整錯誤: {e}")
+            return pil_image, max_width_mm * 0.8, max_height_mm * 0.8
+
     def crop_image_for_layout(self, pil_image, target_ratio="16:9"):
         """根據版面需求裁切圖片"""
         try:
@@ -442,80 +481,71 @@ class PDFMagazineMaker:
             return pil_image
     
     def wrap_text(self, text, max_width_chars, canvas_obj):
-        """智能文字換行 - 優化中文處理"""
+        """簡化文字換行處理"""
         if not text:
             return [""]
         
-        # 中文字符按字數切分，英文按單詞切分
+        # 簡化處理：直接按字數切分，避免複雜邏輯
         lines = []
-        current_line = ""
+        text = str(text).strip()
         
-        # 處理強制換行符
-        paragraphs = text.replace('\n', '\\n').split('\\n')
+        # 移除換行符，簡化處理
+        text = text.replace('\n', ' ').replace('\r', ' ')
         
-        for paragraph in paragraphs:
-            if not paragraph.strip():
-                if current_line:
-                    lines.append(current_line)
-                    current_line = ""
-                continue
-                
-            i = 0
-            while i < len(paragraph):
-                char = paragraph[i]
-                
-                # 如果遇到標點符號，優先在此處換行
-                if char in '，。！？；：':
-                    current_line += char
-                    if len(current_line) >= max_width_chars * 0.8:  # 80%長度時考慮換行
-                        lines.append(current_line)
-                        current_line = ""
-                # 如果是中文字符或其他寬字符
-                elif ord(char) > 127:
-                    if len(current_line) >= max_width_chars:
-                        lines.append(current_line)
-                        current_line = char
-                    else:
-                        current_line += char
-                else:
-                    # 英文字符，以單詞為單位
-                    word_end = i
-                    while word_end < len(paragraph) and ord(paragraph[word_end]) <= 127 and paragraph[word_end] not in ' \t':
-                        word_end += 1
-                    
-                    word = paragraph[i:word_end]
-                    if len(current_line) + len(word) > max_width_chars and current_line:
-                        lines.append(current_line)
-                        current_line = word
-                    else:
-                        current_line += word
-                    
-                    i = word_end - 1
-                
-                i += 1
+        # 簡單按字數切分
+        while len(text) > max_width_chars:
+            # 在標點符號處切分（如果有的話）
+            cut_pos = max_width_chars
+            for i in range(max_width_chars - 5, max_width_chars):
+                if i < len(text) and text[i] in '，。！？；：、':
+                    cut_pos = i + 1
+                    break
             
-            # 段落結束，如果有內容就加入行列表
-            if current_line:
-                lines.append(current_line)
-                current_line = ""
+            lines.append(text[:cut_pos].strip())
+            text = text[cut_pos:].strip()
+        
+        if text:
+            lines.append(text)
         
         return lines if lines else [""]
     
     
-    def create_custom_page(self, canvas_obj, page_data, images_for_page, template_config, font_name, layout):
+    def create_custom_page(self, canvas_obj, page_data, images_for_page, template_config, font_name, layout, floorplan_image=None):
         """創建自定義頁面"""
         page_type = page_data.get("page_type", "")
+        print(f"    創建頁面類型: {page_type}")
         
-        if page_type == "cover":
-            self.draw_cover_page(canvas_obj, page_data, images_for_page, template_config, font_name, layout)
-        elif page_type == "contents":
-            self.draw_contents_page(canvas_obj, page_data, images_for_page, template_config, font_name, layout)
-        elif page_type == "style_overview":
-            self.draw_style_page(canvas_obj, page_data, images_for_page, template_config, font_name, layout)
-        elif page_type == "room_detail":
-            self.draw_room_page(canvas_obj, page_data, images_for_page, template_config, font_name, layout)
-        elif page_type == "summary":
-            self.draw_summary_page(canvas_obj, page_data, images_for_page, template_config, font_name, layout)
+        try:
+            if page_type == "cover":
+                print(f"    開始繪製封面頁...")
+                self.draw_cover_page(canvas_obj, page_data, images_for_page, template_config, font_name, layout)
+            elif page_type == "contents":
+                print(f"    開始繪製目錄頁...")
+                self.draw_contents_page(canvas_obj, page_data, images_for_page, template_config, font_name, layout, floorplan_image)
+            elif page_type == "style_overview":
+                print(f"    開始繪製風格頁...")
+                self.draw_style_page(canvas_obj, page_data, images_for_page, template_config, font_name, layout)
+            elif page_type == "room_detail":
+                print(f"    開始繪製房間頁...")
+                self.draw_room_page(canvas_obj, page_data, images_for_page, template_config, font_name, layout)
+            elif page_type == "summary":
+                print(f"    開始繪製總結頁...")
+                self.draw_summary_page(canvas_obj, page_data, images_for_page, template_config, font_name, layout)
+            else:
+                print(f"    未知頁面類型: {page_type}")
+            print(f"    頁面類型 {page_type} 繪製完成")
+        except Exception as e:
+            print(f"    頁面類型 {page_type} 繪製失敗: {e}")
+            # 繪製一個簡單的錯誤頁面，而不是完全失敗
+            try:
+                canvas_obj.setFillColor(colors.black)
+                canvas_obj.setFont("Helvetica", 24)
+                canvas_obj.drawCentredString(105*mm, 150*mm, f"頁面繪製錯誤: {page_type}")
+                canvas_obj.setFont("Helvetica", 12)
+                canvas_obj.drawCentredString(105*mm, 130*mm, f"錯誤訊息: {str(e)[:50]}...")
+                print(f"    已繪製錯誤頁面替代")
+            except:
+                print(f"    連錯誤頁面也無法繪製")
     
     def draw_cover_page(self, canvas_obj, page_data, images_for_page, template_config, font_name, layout):
         """繪製封面頁 - 支援三種版型"""
@@ -551,7 +581,7 @@ class PDFMagazineMaker:
         canvas_obj.setFillColor(colors.white)
         canvas_obj.setFont(font_name, 42)
         title = page_data.get("title", "")
-        title_lines = self.wrap_text(title, 15, canvas_obj)
+        title_lines = self.wrap_text(title, 12, canvas_obj)
         y_start = 180*mm
         for i, line in enumerate(title_lines):
             canvas_obj.drawCentredString(105*mm, y_start - i*12*mm, line)
@@ -559,7 +589,7 @@ class PDFMagazineMaker:
         # 副標題
         canvas_obj.setFont(font_name, 20)
         subtitle = page_data.get("subtitle", "")
-        subtitle_lines = self.wrap_text(subtitle, 25, canvas_obj)
+        subtitle_lines = self.wrap_text(subtitle, 20, canvas_obj)
         y_start = 130*mm
         for i, line in enumerate(subtitle_lines):
             canvas_obj.drawCentredString(105*mm, y_start - i*7*mm, line)
@@ -567,7 +597,7 @@ class PDFMagazineMaker:
         # 描述文字
         canvas_obj.setFont(font_name, 14)
         description = page_data.get("description", "")
-        desc_lines = self.wrap_text(description, 35, canvas_obj)
+        desc_lines = self.wrap_text(description, 28, canvas_obj)
         y_start = 90*mm
         for i, line in enumerate(desc_lines):
             canvas_obj.drawCentredString(105*mm, y_start - i*5*mm, line)
@@ -594,7 +624,7 @@ class PDFMagazineMaker:
         canvas_obj.setFillColor(template_config["title_color"])
         canvas_obj.setFont(font_name, 36)
         title = page_data.get("title", "")
-        title_lines = self.wrap_text(title, 18, canvas_obj)
+        title_lines = self.wrap_text(title, 15, canvas_obj)
         y_start = 75*mm
         for i, line in enumerate(title_lines):
             canvas_obj.drawString(margin, y_start - i*10*mm, line)
@@ -603,7 +633,7 @@ class PDFMagazineMaker:
         canvas_obj.setFillColor(template_config["subtitle_color"])
         canvas_obj.setFont(font_name, 18)
         subtitle = page_data.get("subtitle", "")
-        subtitle_lines = self.wrap_text(subtitle, 30, canvas_obj)
+        subtitle_lines = self.wrap_text(subtitle, 25, canvas_obj)
         y_start = 45*mm
         for i, line in enumerate(subtitle_lines):
             canvas_obj.drawString(margin, y_start - i*6*mm, line)
@@ -612,7 +642,7 @@ class PDFMagazineMaker:
         canvas_obj.setFillColor(template_config["content_color"])
         canvas_obj.setFont(font_name, 12)
         description = page_data.get("description", "")
-        desc_lines = self.wrap_text(description, 40, canvas_obj)
+        desc_lines = self.wrap_text(description, 32, canvas_obj)
         y_start = 25*mm
         for i, line in enumerate(desc_lines):
             canvas_obj.drawString(margin, y_start - i*4*mm, line)
@@ -655,7 +685,7 @@ class PDFMagazineMaker:
         canvas_obj.setFillColor(colors.white)
         canvas_obj.setFont(font_name, 40)
         title = page_data.get("title", "")
-        title_lines = self.wrap_text(title, 12, canvas_obj)
+        title_lines = self.wrap_text(title, 10, canvas_obj)
         y_start = 120*mm
         for i, line in enumerate(title_lines):
             canvas_obj.drawString(margin, y_start - i*12*mm, line)
@@ -663,7 +693,7 @@ class PDFMagazineMaker:
         # 副標題 - 對角線排列
         canvas_obj.setFont(font_name, 16)
         subtitle = page_data.get("subtitle", "")
-        subtitle_lines = self.wrap_text(subtitle, 25, canvas_obj)
+        subtitle_lines = self.wrap_text(subtitle, 20, canvas_obj)
         y_start = 80*mm
         for i, line in enumerate(subtitle_lines):
             x_offset = margin + i * 5*mm  # 階梯式排列
@@ -672,15 +702,50 @@ class PDFMagazineMaker:
         # 描述文字
         canvas_obj.setFont(font_name, 12)
         description = page_data.get("description", "")
-        desc_lines = self.wrap_text(description, 35, canvas_obj)
+        desc_lines = self.wrap_text(description, 28, canvas_obj)
         y_start = 50*mm
         for i, line in enumerate(desc_lines):
             canvas_obj.drawString(margin, y_start - i*4*mm, line)
     
-    def draw_contents_page(self, canvas_obj, page_data, images_for_page, template_config, font_name, layout):
-        """繪製目錄頁 - 滿版設計"""
-        # 上半部大圖
-        if images_for_page:
+    def draw_contents_page(self, canvas_obj, page_data, images_for_page, template_config, font_name, layout, floorplan_image=None):
+        """繪製目錄頁 - 使用原始平面圖"""
+        # 上半部平面圖
+        if floorplan_image:
+            try:
+                print("開始處理平面圖...")
+                
+                # 簡化處理：直接使用mm單位
+                max_width_mm = 210
+                max_height_mm = 148.5
+                
+                resized_floorplan, final_width_mm, final_height_mm = self.resize_floorplan_for_layout(
+                    floorplan_image, max_width_mm, max_height_mm
+                )
+                
+                # 計算居中位置
+                x_offset = (max_width_mm - final_width_mm) / 2
+                y_offset = 148.5 + (max_height_mm - final_height_mm) / 2
+                
+                canvas_obj.drawInlineImage(
+                    resized_floorplan, 
+                    x_offset*mm, 
+                    y_offset*mm, 
+                    width=final_width_mm*mm, 
+                    height=final_height_mm*mm
+                )
+                print(f"平面圖已插入目錄頁: {final_width_mm:.1f}x{final_height_mm:.1f}mm")
+            except Exception as e:
+                print(f"平面圖處理錯誤: {e}")
+                # 回退到原始處理方式
+                if images_for_page:
+                    try:
+                        img = self.crop_image_for_layout(images_for_page[0], "16:9")
+                        canvas_obj.drawInlineImage(img, 0, 148.5*mm, width=210*mm, height=148.5*mm)
+                        print("使用生成圖片作為回退方案")
+                    except Exception as e2:
+                        print(f"回退方案也失敗: {e2}")
+        elif images_for_page:
+            # 如果沒有平面圖，使用生成的圖片
             try:
                 img = self.crop_image_for_layout(images_for_page[0], "16:9")
                 canvas_obj.drawInlineImage(img, 0, 148.5*mm, width=210*mm, height=148.5*mm)
@@ -717,7 +782,7 @@ class PDFMagazineMaker:
                 canvas_obj.setFont(font_name, 12)  # 調大字體
                 highlight = room.get('highlight', '')
                 if highlight:
-                    highlight_lines = self.wrap_text(highlight, 20, canvas_obj)
+                    highlight_lines = self.wrap_text(highlight, 16, canvas_obj)
                     for j, line in enumerate(highlight_lines[:2]):  # 最多2行
                         canvas_obj.drawString(x_pos + 5*mm, y_pos - (j+1)*4*mm, line)
                 
@@ -787,7 +852,7 @@ class PDFMagazineMaker:
                 
                 canvas_obj.setFillColor(template_config["content_color"])
                 canvas_obj.setFont(font_name, 10)  # 調大字體
-                content_lines = self.wrap_text(section_content, 25, canvas_obj)
+                content_lines = self.wrap_text(section_content, 20, canvas_obj)
                 for line in content_lines[:3]:  # 最多3行
                     if y_pos > 10*mm:
                         canvas_obj.drawString(col1_x, y_pos, line)
@@ -805,7 +870,7 @@ class PDFMagazineMaker:
                 
                 canvas_obj.setFillColor(template_config["content_color"])
                 canvas_obj.setFont(font_name, 10)  # 調大字體
-                content_lines = self.wrap_text(section_content, 25, canvas_obj)
+                content_lines = self.wrap_text(section_content, 20, canvas_obj)
                 for line in content_lines[:3]:  # 最多3行
                     if y_pos > 10*mm:
                         canvas_obj.drawString(col2_x, y_pos, line)
@@ -844,7 +909,7 @@ class PDFMagazineMaker:
         canvas_obj.setFillColor(template_config["content_color"])
         canvas_obj.setFont(font_name, 11)  # 調大字體
         design_concept = page_data.get("design_concept", "")
-        concept_lines = self.wrap_text(design_concept, 30, canvas_obj)
+        concept_lines = self.wrap_text(design_concept, 25, canvas_obj)
         y_pos = 240*mm
         for line in concept_lines[:3]:
             canvas_obj.drawString(margin, y_pos, line)
@@ -875,7 +940,7 @@ class PDFMagazineMaker:
                 y_pos -= 4*mm
                 
                 canvas_obj.setFont(font_name, 9)
-                content_lines = self.wrap_text(section_content, 35, canvas_obj)
+                content_lines = self.wrap_text(section_content, 28, canvas_obj)
                 for line in content_lines[:2]:  # 最多2行
                     if y_pos > 30*mm:
                         canvas_obj.drawString(85*mm, y_pos, line)
@@ -954,7 +1019,7 @@ class PDFMagazineMaker:
                 canvas_obj.drawString(x_pos, 60*mm, section_title)
                 
                 canvas_obj.setFont(font_name, 10)  # 調大字體
-                content_lines = self.wrap_text(section_content, 18, canvas_obj)
+                content_lines = self.wrap_text(section_content, 15, canvas_obj)
                 y_pos = 50*mm
                 for line in content_lines[:4]:  # 最多4行
                     if y_pos > 15*mm:
@@ -989,7 +1054,7 @@ class PDFMagazineMaker:
         canvas_obj.setFont(font_name, 14)  # 調大字體
         description = page_data.get("style_description", "")
         if description:
-            desc_lines = self.wrap_text(description, 35, canvas_obj)
+            desc_lines = self.wrap_text(description, 28, canvas_obj)
             y_pos = 95*mm
             for line in desc_lines[:4]:  # 最多4行
                 canvas_obj.drawString(margin, y_pos, line)
@@ -1054,7 +1119,7 @@ class PDFMagazineMaker:
                     
                     canvas_obj.setFillColor(template_config["content_color"])
                     canvas_obj.setFont(font_name, 11)  # 調大字體
-                    content_lines = self.wrap_text(section_content, 25, canvas_obj)
+                    content_lines = self.wrap_text(section_content, 20, canvas_obj)
                     for j, line in enumerate(content_lines[:4]):  # 最多4行
                         canvas_obj.drawString(x_pos, y_pos - (j+1)*4*mm, line)
         
@@ -1065,12 +1130,13 @@ class PDFMagazineMaker:
         if contact_info:
             canvas_obj.drawCentredString(105*mm, 25*mm, contact_info)
     
-    def make_pdf_magazine(self, images, json_data, template, layout, font, output_path):
+    def make_pdf_magazine(self, images, json_data, floorplanimage, template, layout, font, output_path):
         try:
             # 調試輸出
             print(f"輸入類型檢查:")
             print(f"  images: {type(images)}")
             print(f"  json_data: {type(json_data)}")
+            print(f"  floorplanimage: {type(floorplanimage)}")
             print(f"  template: {type(template)}")
             print(f"  font: {type(font)}")
             print(f"  output_path: {type(output_path)}")
@@ -1078,6 +1144,8 @@ class PDFMagazineMaker:
             # 處理輸入參數，確保非列表參數不是列表
             if isinstance(json_data, list):
                 json_data = json_data[0] if json_data else "{}"
+            if isinstance(floorplanimage, list):
+                floorplanimage = floorplanimage[0] if floorplanimage else None
             if isinstance(template, list):
                 template = template[0] if template else "經典雜誌"
             if isinstance(layout, list):
@@ -1121,6 +1189,15 @@ class PDFMagazineMaker:
             print(f"總共有 {len(images)} 張圖片需要處理")
             print(f"總共有 {len(magazine_data)} 個頁面需要創建")
             
+            # 處理平面圖
+            processed_floorplan = None
+            if floorplanimage is not None:
+                try:
+                    processed_floorplan = self.tensor_to_pil(floorplanimage)
+                    print(f"平面圖已處理，尺寸: {processed_floorplan.size}")
+                except Exception as e:
+                    print(f"平面圖處理失敗: {e}")
+            
             # 智能分配圖片到各頁面
             images_distribution = self.distribute_images_to_pages(magazine_data, images)
             
@@ -1128,24 +1205,40 @@ class PDFMagazineMaker:
             c = canvas.Canvas(output_path, pagesize=A4)
             
             for i, page_data in enumerate(magazine_data):
-                print(f"正在處理第 {i+1} 頁: {page_data.get('page_type', 'unknown')}")
-                
-                # 獲取該頁面的圖片
-                page_images = images_distribution.get(i, [])
-                print(f"  分配到 {len(page_images)} 張圖片")
-                
-                # 處理圖片為PIL格式
-                processed_images = []
-                for img in page_images:
-                    pil_img = self.tensor_to_pil(img)
-                    processed_images.append(pil_img)
-                
-                # 繪製頁面
-                self.create_custom_page(c, page_data, processed_images, template_config, font_name, layout)
-                
-                # 添加新頁面（除了最後一頁）
-                if i < len(magazine_data) - 1:
-                    c.showPage()
+                try:
+                    print(f"開始處理第 {i+1} 頁: {page_data.get('page_type', 'unknown')}")
+                    
+                    # 獲取該頁面的圖片
+                    page_images = images_distribution.get(i, [])
+                    print(f"  分配到 {len(page_images)} 張圖片")
+                    
+                    # 處理圖片為PIL格式
+                    print(f"  開始轉換圖片...")
+                    processed_images = []
+                    for j, img in enumerate(page_images):
+                        try:
+                            pil_img = self.tensor_to_pil(img)
+                            processed_images.append(pil_img)
+                            print(f"    圖片 {j+1} 轉換完成")
+                        except Exception as e:
+                            print(f"    圖片 {j+1} 轉換失敗: {e}")
+                    
+                    # 繪製頁面
+                    print(f"  開始繪製頁面...")
+                    self.create_custom_page(c, page_data, processed_images, template_config, font_name, layout, processed_floorplan)
+                    print(f"  第 {i+1} 頁繪製完成")
+                    
+                    # 添加新頁面（除了最後一頁）
+                    if i < len(magazine_data) - 1:
+                        print(f"  添加新頁面...")
+                        c.showPage()
+                        print(f"  新頁面添加完成")
+                        
+                except Exception as e:
+                    print(f"第 {i+1} 頁處理失敗: {e}")
+                    # 即使失敗也嘗試繼續下一頁
+                    if i < len(magazine_data) - 1:
+                        c.showPage()
             
             # 保存PDF
             c.save()
