@@ -52,8 +52,10 @@ class PresentationGenerator:
                 "model": (["gemini-2.5-pro", "gemini-2.5-flash"], {"default": "gemini-2.5-flash"}),
                 "design_style": ([
                     "現代簡約風", "工業風", "自然風", "北歐風", "日式和風", 
-                    "美式鄉村風", "法式古典風", "地中海風", "復古風", "新中式風"
+                    "美式鄉村風", "法式古典風", "地中海風", "復古風", "新中式風", "自定風格"
                 ], {"default": "現代簡約風"}),
+                "custom_style": ("STRING", {"default": "", "placeholder": "當選擇自定風格時，請輸入風格描述"}),
+                "custom_scene": ("STRING", {"default": "", "placeholder": "指定平面圖適用場景（如：教室、會議室、餐廳等），空白則自動判定"}),
                 "image": ("IMAGE",),
             }
         }
@@ -65,7 +67,7 @@ class PresentationGenerator:
     FUNCTION = "generate_presentation"
     CATEGORY = "presentation"
     
-    def generate_presentation(self, api_key, model, design_style, image):
+    def generate_presentation(self, api_key, model, design_style, custom_style, custom_scene, image):
         try:
             # 儲存API Key以供下次使用
             if api_key and api_key != self.get_saved_api_key():
@@ -96,9 +98,22 @@ class PresentationGenerator:
             pil_image.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
             
+            # 處理風格選擇
+            if design_style == "自定風格" and custom_style.strip():
+                effective_style = custom_style.strip()
+            else:
+                effective_style = design_style
+            
+            # 處理場景指定
+            scene_instruction = ""
+            if custom_scene.strip():
+                scene_instruction = f"請注意，此平面圖是「{custom_scene.strip()}」的場景，"
+            else:
+                scene_instruction = "請先判斷此平面圖的適用場景（如住宅、辦公室、商店等），然後"
+            
             # 優化後的提示詞，加入第二頁特殊格式和裝修風格
             prompt = f"""
-請您作為專業室內設計師，仔細分析此平面圖並以「{design_style}」為主要設計風格，輸出一個完整的JSON檔案，用於製作室內裝修提案簡報。
+請您作為專業室內設計師，{scene_instruction}仔細分析此平面圖並以「{effective_style}」為主要設計風格，輸出一個完整的JSON檔案，用於製作室內裝修提案簡報。
 
 JSON結構要求：
 1. 第一頁（主題頁）：
@@ -108,16 +123,16 @@ JSON結構要求：
 
 2. 第二頁（提案風格概述）：
    - value: "提案風格概述"
-   - description: "{design_style}風格特色說明"
+   - description: "{effective_style}風格特色說明"
    - topic1: "動線規劃說明"
    - summary1: 針對此平面圖的動線規劃分析（35字內）
    - topic2: "設計主軸概念"
-   - summary2: {design_style}的核心設計理念（35字內）
+   - summary2: {effective_style}的核心設計理念（35字內）
    - topic3: "色彩與材質概念"
-   - summary3: {design_style}的色彩搭配和材質選擇（35字內）
+   - summary3: {effective_style}的色彩搭配和材質選擇（35字內）
    - topic4: "空間機能規劃說明"
    - summary4: 根據平面圖的機能空間配置說明（35字內）
-   - image: {design_style}風格的整體空間英文提示詞（80個token內）
+   - image: {effective_style}風格的整體空間英文提示詞（80個token內）
 
 3. 中間頁面（各房間）：
    - value: 房間類型的中文名稱（如"客廳"、"主臥室"等）
@@ -133,7 +148,7 @@ JSON結構要求：
 - 第一頁和最後一頁的description必須控制在15個中文字以內
 - 第二頁的四個summary必須各自控制在35個中文字以內
 - 請根據平面圖中的實際房間配置和大小比例進行分析
-- 確保所有房間的設計風格統一為「{design_style}」
+- 確保所有房間的設計風格統一為「{effective_style}」
 - 英文提示詞需精準且具體，適合AI圖像生成
 - 中文描述要專業且易懂，包含實用的裝修建議
 

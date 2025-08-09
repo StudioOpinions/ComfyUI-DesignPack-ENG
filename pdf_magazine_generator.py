@@ -54,8 +54,10 @@ class PDFMagazineGenerator:
                 "model": (["gemini-2.5-pro", "gemini-2.5-flash"], {"default": "gemini-2.5-flash"}),
                 "design_style": ([
                     "現代簡約風", "工業風", "自然風", "北歐風", "日式和風", 
-                    "美式鄉村風", "法式古典風", "地中海風", "復古風", "新中式風"
+                    "美式鄉村風", "法式古典風", "地中海風", "復古風", "新中式風", "自定風格"
                 ], {"default": "現代簡約風"}),
+                "custom_style": ("STRING", {"default": "", "placeholder": "當選擇自定風格時，請輸入風格描述"}),
+                "custom_scene": ("STRING", {"default": "", "placeholder": "指定平面圖適用場景（如：教室、會議室、餐廳等），空白則自動判定"}),
                 "magazine_style": ([
                     "時尚雜誌風", "建築專業雜誌", "居家生活雜誌", "設計師作品集", "房地產DM"
                 ], {"default": "居家生活雜誌"}),
@@ -70,7 +72,7 @@ class PDFMagazineGenerator:
     FUNCTION = "generate_pdf_magazine"
     CATEGORY = "pdf_magazine"
     
-    def generate_pdf_magazine(self, api_key, model, design_style, magazine_style, image):
+    def generate_pdf_magazine(self, api_key, model, design_style, custom_style, custom_scene, magazine_style, image):
         try:
             # 儲存API Key以供下次使用
             if api_key and api_key != self.get_saved_api_key():
@@ -101,9 +103,22 @@ class PDFMagazineGenerator:
             pil_image.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
             
+            # 處理風格選擇
+            if design_style == "自定風格" and custom_style.strip():
+                effective_style = custom_style.strip()
+            else:
+                effective_style = design_style
+            
+            # 處理場景指定
+            scene_instruction = ""
+            if custom_scene.strip():
+                scene_instruction = f"請注意，此平面圖是「{custom_scene.strip()}」的場景，"
+            else:
+                scene_instruction = "請先判斷此平面圖的適用場景（如住宅、辦公室、商店等），然後"
+            
             # 為PDF雜誌/DM設計的提示詞
             prompt = f"""
-請您作為專業室內設計師，分析此平面圖並以「{design_style}」為主要設計風格，以「{magazine_style}」的版面風格，輸出適合製作A4 PDF雜誌/DM的JSON陣列資料。
+請您作為專業室內設計師，{scene_instruction}分析此平面圖並以「{effective_style}」為主要設計風格，以「{magazine_style}」的版面風格，輸出適合製作A4 PDF雜誌/DM的JSON陣列資料。
 
 重要：請輸出一個JSON陣列，包含多個頁面物件。格式必須是：[{{"page_type": "cover", ...}}, {{"page_type": "contents", ...}}, ...]
 
@@ -113,7 +128,7 @@ JSON結構要求：
    - title: 主標題（限制12個中文字，如"夢想居家設計"）
    - subtitle: 副標題（限制10個中文字，描述風格特色）
    - description: 封面說明文字（限制25個中文字）
-   - image_prompt: 封面形象的英文提示詞（80個token內，適合雜誌封面）
+   - image_prompt: 封面形象的英文提示詞（80個token內，風格化室內設計圖片）
 
 2. 目錄頁（Contents）：
    - page_type: "contents"
@@ -126,12 +141,12 @@ JSON結構要求：
 
 3. 風格介紹頁（Style Overview）：
    - page_type: "style_overview"
-   - title: "{design_style}風格解析"
+   - title: "{effective_style}風格解析"
    - style_description: 風格詳細介紹（限制80個中文字）
    - key_elements: 風格關鍵元素陣列（3-4個項目，每項限制15個中文字）
    - color_palette: 色彩搭配說明（限制40個中文字）
    - material_guide: 材質運用說明（限制40個中文字）
-   - image_prompt: {design_style}風格展示空間的英文提示詞（80個token內）
+   - image_prompt: {effective_style}風格展示空間的英文提示詞（80個token內）
 
 4. 各房間詳細頁面：
    - page_type: "room_detail"
@@ -161,7 +176,7 @@ JSON結構要求：
 
 重要限制：
 - 請根據平面圖實際房間配置進行分析
-- 確保所有設計建議符合「{design_style}」風格
+- 確保所有設計建議符合「{effective_style}」風格
 - 英文提示詞要精準具體，適合AI圖像生成，比例建議為16:9或4:3
 - 中文內容要專業易懂，適合{magazine_style}的閱讀體驗
 - 每個頁面都要有對應的image_prompt
@@ -268,7 +283,7 @@ class PDFMagazineMaker:
                 "json_data": ("STRING",),
                 "floorplanimage": ("IMAGE",),
                 "template": (["經典雜誌", "現代簡約", "時尚風格", "專業商務", "溫馨居家"], {"default": "經典雜誌"}),
-                "layout": (["版型A-經典佈局", "版型B-滿版圖文", "版型C-藝術拼貼"], {"default": "版型A-經典佈局"}),
+                "layout": (["版型A-經典佈局", "版型B-滿版圖文", "版型C-藝術拼貼", "版型D-反轉經典"], {"default": "版型A-經典佈局"}),
                 "font": (font_files, {"default": font_files[0] if font_files else "default"}),
                 "output_path": ("STRING", {"default": "./output/magazine.pdf"}),
             }
@@ -406,7 +421,7 @@ class PDFMagazineMaker:
             return pil_image, max_width_mm * 0.8, max_height_mm * 0.8
 
     def crop_image_for_layout(self, pil_image, target_ratio="16:9"):
-        """根據版面需求裁切圖片"""
+        """根據版面需求裁切圖片 - 改進版本，使用中心裁切避免變形"""
         try:
             width, height = pil_image.size
             current_ratio = width / height
@@ -420,16 +435,24 @@ class PDFMagazineMaker:
             else:
                 target_ratio_value = 16 / 9  # 默認
             
-            if current_ratio > target_ratio_value:
-                # 圖片太寬，需要裁切寬度
+            # 使用中心裁切，保持圖片比例不變形
+            if abs(current_ratio - target_ratio_value) < 0.1:
+                # 比例已經很接近，不需要裁切
+                return pil_image
+            elif current_ratio > target_ratio_value:
+                # 圖片太寬，從中心裁切寬度
                 new_width = int(height * target_ratio_value)
                 left = (width - new_width) // 2
-                pil_image = pil_image.crop((left, 0, left + new_width, height))
+                right = left + new_width
+                pil_image = pil_image.crop((left, 0, right, height))
+                print(f"中心裁切寬度: {width}x{height} -> {new_width}x{height}")
             elif current_ratio < target_ratio_value:
-                # 圖片太高，需要裁切高度
+                # 圖片太高，從中心裁切高度
                 new_height = int(width / target_ratio_value)
                 top = (height - new_height) // 2
-                pil_image = pil_image.crop((0, top, width, top + new_height))
+                bottom = top + new_height
+                pil_image = pil_image.crop((0, top, width, bottom))
+                print(f"中心裁切高度: {width}x{height} -> {width}x{new_height}")
             
             return pil_image
             
@@ -549,13 +572,15 @@ class PDFMagazineMaker:
                 print(f"    連錯誤頁面也無法繪製")
     
     def draw_cover_page(self, canvas_obj, page_data, images_for_page, template_config, font_name, layout):
-        """繪製封面頁 - 支援三種版型"""
+        """繪製封面頁 - 支援四種版型"""
         if layout == "版型A-經典佈局":
             self.draw_cover_layout_a(canvas_obj, page_data, images_for_page, template_config, font_name)
         elif layout == "版型B-滿版圖文":
             self.draw_cover_layout_b(canvas_obj, page_data, images_for_page, template_config, font_name)
         elif layout == "版型C-藝術拼貼":
             self.draw_cover_layout_c(canvas_obj, page_data, images_for_page, template_config, font_name)
+        elif layout == "版型D-反轉經典":
+            self.draw_cover_layout_d(canvas_obj, page_data, images_for_page, template_config, font_name)
         else:
             # 默認使用版型A
             self.draw_cover_layout_a(canvas_obj, page_data, images_for_page, template_config, font_name)
@@ -649,70 +674,84 @@ class PDFMagazineMaker:
             canvas_obj.drawString(margin, y_start - i*4*mm, line)
     
     def draw_cover_layout_c(self, canvas_obj, page_data, images_for_page, template_config, font_name):
-        """版型C: 藝術拼貼 - 多圖片幾何排列"""
+        """版型C: 藝術拼貼 - 改進版，避免標題與圖片重疊，改善圖片裁切"""
         # 確保至少有圖片可用，否則使用循環方式
         if not images_for_page:
             return
-            
-        # 左上大圖 - 使用第一張圖片
+        
+        # 重新設計圖片佈局，避免文字與圖片重疊
+        # 左上大圖 - 使用中心裁切
         try:
             img1 = self.crop_image_for_layout(images_for_page[0], "4:3")
-            canvas_obj.drawInlineImage(img1, 0, 148*mm, width=126*mm, height=149*mm)
-            print("封面左上大圖已設置")
+            canvas_obj.drawInlineImage(img1, 0, 170*mm, width=126*mm, height=127*mm)
+            print("封面左上大圖已設置 (改進裁切)")
         except Exception as e:
             print(f"圖片1處理錯誤: {e}")
         
-        # 右上圖 - 使用第二張圖片，如果沒有則重複使用第一張
+        # 右上圖 - 使用中心裁切，調整位置避免與標題重疊
         try:
             img_index = 1 if len(images_for_page) > 1 else 0
             img2 = self.crop_image_for_layout(images_for_page[img_index], "1:1")
-            canvas_obj.drawInlineImage(img2, 126*mm, 198*mm, width=84*mm, height=99*mm)
-            print("封面右上圖已設置")
+            canvas_obj.drawInlineImage(img2, 126*mm, 220*mm, width=84*mm, height=77*mm)
+            print("封面右上圖已設置 (調整位置)")
         except Exception as e:
             print(f"圖片2處理錯誤: {e}")
         
-        # 右中圖 - 使用第三張圖片，如果沒有則循環使用
+        # 右中圖 - 使用中心裁切
         try:
             img_index = 2 if len(images_for_page) > 2 else (0 if len(images_for_page) == 1 else 1)
-            img3 = self.crop_image_for_layout(images_for_page[img_index], "1:1")
-            canvas_obj.drawInlineImage(img3, 126*mm, 148*mm, width=84*mm, height=50*mm)
-            print("封面右中圖已設置")
+            img3 = self.crop_image_for_layout(images_for_page[img_index], "16:9")
+            canvas_obj.drawInlineImage(img3, 126*mm, 170*mm, width=84*mm, height=47*mm)
+            print("封面右中圖已設置 (改進比例)")
         except Exception as e:
             print(f"圖片3處理錯誤: {e}")
         
-        # 文字區域 - 透明黑色底
-        canvas_obj.setFillColor(colors.black)
-        canvas_obj.setFillAlpha(0.7)
-        canvas_obj.rect(0, 0, 210*mm, 148*mm, fill=1, stroke=0)
+        # 標題區域 - 獨立的透明區域，不與圖片重疊
+        title_area_height = 50*mm
+        canvas_obj.setFillColor(colors.white)
+        canvas_obj.setFillAlpha(0.95)
+        canvas_obj.rect(0, 120*mm, 210*mm, title_area_height, fill=1, stroke=0)
         canvas_obj.setFillAlpha(1)
         
         margin = 15*mm
         
-        # 主標題 - 白色大字
-        canvas_obj.setFillColor(colors.white)
-        canvas_obj.setFont(font_name, 40)
+        # 主標題 - 黑色文字，清晰可見
+        canvas_obj.setFillColor(template_config["title_color"])
+        canvas_obj.setFont(font_name, 36)  # 稍微縮小避免過於擁擠
         title = page_data.get("title", "")
-        title_lines = self.wrap_text(title, 10, canvas_obj)
-        y_start = 120*mm
+        title_lines = self.wrap_text(title, 12, canvas_obj)
+        y_start = 155*mm
         for i, line in enumerate(title_lines):
-            canvas_obj.drawString(margin, y_start - i*12*mm, line)
+            canvas_obj.drawString(margin, y_start - i*10*mm, line)
         
-        # 副標題 - 對角線排列
+        # 副標題 - 整齊排列
+        canvas_obj.setFillColor(template_config["subtitle_color"])
         canvas_obj.setFont(font_name, 16)
         subtitle = page_data.get("subtitle", "")
-        subtitle_lines = self.wrap_text(subtitle, 20, canvas_obj)
-        y_start = 80*mm
+        subtitle_lines = self.wrap_text(subtitle, 24, canvas_obj)
+        y_start = 135*mm
         for i, line in enumerate(subtitle_lines):
-            x_offset = margin + i * 5*mm  # 階梯式排列
-            canvas_obj.drawString(x_offset, y_start - i*6*mm, line)
+            canvas_obj.drawString(margin, y_start - i*6*mm, line)
         
-        # 描述文字
-        canvas_obj.setFont(font_name, 12)
+        # 文字區域 - 底部獨立區域
+        canvas_obj.setFillColor(colors.black)
+        canvas_obj.setFillAlpha(0.8)
+        canvas_obj.rect(0, 0, 210*mm, 120*mm, fill=1, stroke=0)
+        canvas_obj.setFillAlpha(1)
+        
+        # 描述文字 - 白色文字
+        canvas_obj.setFillColor(colors.white)
+        canvas_obj.setFont(font_name, 14)
         description = page_data.get("description", "")
-        desc_lines = self.wrap_text(description, 28, canvas_obj)
-        y_start = 50*mm
+        desc_lines = self.wrap_text(description, 30, canvas_obj)
+        y_start = 100*mm
         for i, line in enumerate(desc_lines):
-            canvas_obj.drawString(margin, y_start - i*4*mm, line)
+            canvas_obj.drawString(margin, y_start - i*5*mm, line)
+    
+    def draw_cover_layout_d(self, canvas_obj, page_data, images_for_page, template_config, font_name):
+        """版型D: 反轉經典 - 與版型A相同的封面設計（封面設計保持一致性）"""
+        # 版型D的封面與版型A相同，差別在於內頁
+        self.draw_cover_layout_a(canvas_obj, page_data, images_for_page, template_config, font_name)
     
     def draw_contents_page(self, canvas_obj, page_data, images_for_page, template_config, font_name, layout, floorplan_image=None):
         """繪製目錄頁 - 豐富的層次設計"""
@@ -802,13 +841,15 @@ class PDFMagazineMaker:
                         canvas_obj.drawString(x_pos + 8*mm, y_pos - (j+1)*5*mm, line)
     
     def draw_room_page(self, canvas_obj, page_data, images_for_page, template_config, font_name, layout):
-        """繪製房間詳細頁 - 支援三種版型"""
+        """繪製房間詳細頁 - 支援四種版型"""
         if layout == "版型A-經典佈局":
             self.draw_room_layout_a(canvas_obj, page_data, images_for_page, template_config, font_name)
         elif layout == "版型B-滿版圖文":
             self.draw_room_layout_b(canvas_obj, page_data, images_for_page, template_config, font_name)
         elif layout == "版型C-藝術拼貼":
             self.draw_room_layout_c(canvas_obj, page_data, images_for_page, template_config, font_name)
+        elif layout == "版型D-反轉經典":
+            self.draw_room_layout_d(canvas_obj, page_data, images_for_page, template_config, font_name)
         else:
             # 默認使用版型A
             self.draw_room_layout_a(canvas_obj, page_data, images_for_page, template_config, font_name)
@@ -907,42 +948,45 @@ class PDFMagazineMaker:
         title = page_data.get("main_title", "")
         design_concept = page_data.get("design_concept", "")
         
-        # 動態計算左上角文字框大小
-        title_lines = self.wrap_text(title, 20, canvas_obj)
-        concept_lines = self.wrap_text(design_concept, 25, canvas_obj)
+        # 動態計算左上角文字框大小 - 修正文字重疊問題
+        title_lines = self.wrap_text(title, 15, canvas_obj)  # 縮短每行字數避免重疊
+        concept_lines = self.wrap_text(design_concept, 20, canvas_obj)  # 進一步縮短行長度
         
-        # 計算所需高度：標題 + 間距 + 設計理念標題 + 內容 + 邊距
-        required_height = len(title_lines) * 6*mm + 10*mm + 6*mm + len(concept_lines[:3]) * 5*mm + 15*mm  # 增加邊距
-        required_width = 120*mm  # 稍微增大寬度
+        # 計算所需高度：標題 + 間距 + 設計理念標題 + 內容 + 充足邊距
+        title_height = len(title_lines) * 8*mm  # 進一步增加標題行距
+        concept_height = len(concept_lines[:3]) * 7*mm  # 進一步增加設計理念行距
+        required_height = title_height + 18*mm + 10*mm + concept_height + 30*mm  # 大幅增加所有間距
+        required_width = 130*mm  # 稍微縮小寬度確保文字不會超出範圍
         
-        # 左上角透明文字區域 - 調整範圍
+        # 左上角透明文字區域 - 確保足夠空間避免重疊
         canvas_obj.setFillColor(colors.white)
-        canvas_obj.setFillAlpha(0.9)
-        canvas_obj.rect(25*mm, 280*mm-required_height, required_width, required_height, fill=1, stroke=0)
+        canvas_obj.setFillAlpha(0.95)  # 提高透明度增強可讀性
+        canvas_obj.rect(25*mm, 297*mm-required_height-15*mm, required_width, required_height, fill=1, stroke=0)
         canvas_obj.setFillAlpha(1)
         
-        margin = 30*mm
-        y_start = 275*mm  # 增加上緣距離
+        margin = 35*mm  # 增加左邊距
+        y_start = 297*mm - 30*mm  # 從頂部留出更多距離
         
-        # 房間標題
+        # 房間標題 - 改善字體大小和間距避免重疊
         canvas_obj.setFillColor(template_config["title_color"])
-        canvas_obj.setFont(font_name, 18)
+        canvas_obj.setFont(font_name, 18)  # 稍微縮小字體確保不重疊
         for i, line in enumerate(title_lines):
-            canvas_obj.drawString(margin, y_start - i*6*mm, line)
+            canvas_obj.drawString(margin, y_start - i*8*mm, line)  # 大幅增加行距
         
-        y_pos = y_start - len(title_lines)*6*mm - 10*mm  # 增加間距
+        y_pos = y_start - len(title_lines)*8*mm - 18*mm  # 大幅增加段落間距
         
-        # 設計理念
+        # 設計理念標題 - 確保與上方標題有足夠間距
         canvas_obj.setFillColor(template_config["accent_color"])
-        canvas_obj.setFont(font_name, 12)
+        canvas_obj.setFont(font_name, 13)  # 適當字體大小
         canvas_obj.drawString(margin, y_pos, "設計理念")
-        y_pos -= 6*mm  # 增加標題和內容間距
+        y_pos -= 10*mm  # 大幅增加標題和內容間距
         
+        # 設計理念內容 - 確保行距足夠避免重疊
         canvas_obj.setFillColor(template_config["content_color"])
-        canvas_obj.setFont(font_name, 11)  # 保持與設計理念相同字體大小
-        for line in concept_lines[:3]:
+        canvas_obj.setFont(font_name, 11)  # 適當內容字體
+        for line in concept_lines[:3]:  # 限制最多3行
             canvas_obj.drawString(margin, y_pos, line)
-            y_pos -= 5*mm  # 增加行距
+            y_pos -= 7*mm  # 大幅增加行距避免重疊
         
         # 計算右下角其他內容的實際需要空間 - 包含所有要素
         sections = [
@@ -973,56 +1017,56 @@ class PDFMagazineMaker:
                 max_lines_right += 1 + len(content_lines[:2])
         
         total_lines = max(max_lines_left, max_lines_right + 1)  # +1 for title
-        box_height = total_lines * 4.5*mm + 25*mm  # 調整行距以容納更多內容
-        box_width = 140*mm  # 增大寬度以容納雙欄
+        box_height = total_lines * 5.5*mm + 35*mm  # 增加行距和邊距
+        box_width = 150*mm  # 再次增大寬度提供更好空間
         
-        # 右下角透明文字區域 - 擴大以容納雙欄
+        # 右下角透明文字區域 - 更大更舒適的區域
         canvas_obj.setFillColor(colors.black)
-        canvas_obj.setFillAlpha(0.8)
-        canvas_obj.rect(210*mm-box_width-10*mm, 15*mm, box_width, box_height, fill=1, stroke=0)
+        canvas_obj.setFillAlpha(0.82)  # 稍微調整透明度
+        canvas_obj.rect(210*mm-box_width-8*mm, 20*mm, box_width, box_height, fill=1, stroke=0)
         canvas_obj.setFillAlpha(1)
         
-        # 設計特色標題
-        margin_right = 210*mm-box_width-5*mm
+        # 設計特色標題 - 改善視覺層次
+        margin_right = 210*mm-box_width-3*mm  # 增加左邊距
         canvas_obj.setFillColor(colors.white)
-        canvas_obj.setFont(font_name, 12)
-        y_pos = 15*mm + box_height - 15*mm
+        canvas_obj.setFont(font_name, 14)  # 增大標題字體
+        y_pos = 20*mm + box_height - 20*mm  # 增加上邊距
         canvas_obj.drawString(margin_right, y_pos, "設計特色")
-        y_pos -= 8*mm
+        y_pos -= 12*mm  # 增加標題和內容間距
         
-        # 左欄內容
+        # 左欄內容 - 修正文字重疊問題
         left_x = margin_right
         left_y = y_pos
         for section_title, section_content in left_sections:
-            if section_content and left_y > 25*mm:
-                canvas_obj.setFont(font_name, 10)
+            if section_content and left_y > 40*mm:
+                canvas_obj.setFont(font_name, 11)  # 稍微縮小標題字體避免重疊
                 canvas_obj.drawString(left_x, left_y, f"{section_title}:")
-                left_y -= 4*mm
+                left_y -= 6*mm  # 增加標題和內容間距
                 
-                canvas_obj.setFont(font_name, 9)
-                content_lines = self.wrap_text(section_content, 18, canvas_obj)
-                for line in content_lines[:2]:  # 最多2行以節省空間
-                    if left_y > 20*mm:
+                canvas_obj.setFont(font_name, 10)  # 縮小內容字體
+                content_lines = self.wrap_text(section_content, 16, canvas_obj)  # 縮短行長度避免重疊
+                for line in content_lines[:2]:  # 最多2行
+                    if left_y > 35*mm:
                         canvas_obj.drawString(left_x, left_y, line)
-                        left_y -= 4*mm
-                left_y -= 2*mm  # 段落間距
+                        left_y -= 6*mm  # 增加行距避免重疊
+                left_y -= 5*mm  # 增加段落間距
         
-        # 右欄內容
-        right_x = margin_right + 65*mm  # 欄位間距
+        # 右欄內容 - 修正文字重疊問題
+        right_x = margin_right + 65*mm  # 調整欄位間距
         right_y = y_pos
         for section_title, section_content in right_sections:
-            if section_content and right_y > 25*mm:
-                canvas_obj.setFont(font_name, 10)
+            if section_content and right_y > 40*mm:
+                canvas_obj.setFont(font_name, 11)  # 稍微縮小標題字體避免重疊
                 canvas_obj.drawString(right_x, right_y, f"{section_title}:")
-                right_y -= 4*mm
+                right_y -= 6*mm  # 增加標題和內容間距
                 
-                canvas_obj.setFont(font_name, 9)
-                content_lines = self.wrap_text(section_content, 18, canvas_obj)
-                for line in content_lines[:2]:  # 最多2行以節省空間
-                    if right_y > 20*mm:
+                canvas_obj.setFont(font_name, 10)  # 縮小內容字體
+                content_lines = self.wrap_text(section_content, 16, canvas_obj)  # 縮短行長度避免重疊
+                for line in content_lines[:2]:  # 最多2行
+                    if right_y > 35*mm:
                         canvas_obj.drawString(right_x, right_y, line)
-                        right_y -= 4*mm
-                right_y -= 2*mm  # 段落間距
+                        right_y -= 6*mm  # 增加行距避免重疊
+                right_y -= 5*mm  # 增加段落間距
     
     def draw_room_layout_c(self, canvas_obj, page_data, images_for_page, template_config, font_name):
         """版型C: 藝術拼貼 - 不規則圖片排列，設計理念覆蓋，其他文字底部排列"""
@@ -1154,6 +1198,87 @@ class PDFMagazineMaker:
                         canvas_obj.drawString(col2_x, y_pos, line)
                         y_pos -= 3.5*mm
                 y_pos -= 3*mm  # 段落間距
+    
+    def draw_room_layout_d(self, canvas_obj, page_data, images_for_page, template_config, font_name):
+        """版型D: 反轉經典 - 真正的上方文字，下方圖片佈局"""
+        
+        # ===== 上方文字區域 (頁面上半部) =====
+        margin = 15*mm
+        col_width = 85*mm
+        col1_x = margin
+        col2_x = margin + col_width + 15*mm
+        
+        # 房間標題 - 頁面最上方
+        canvas_obj.setFillColor(template_config["title_color"])
+        canvas_obj.setFont(font_name, 22)
+        title = page_data.get("main_title", "")
+        canvas_obj.drawString(col1_x, 280*mm, title)
+        
+        # 設計內容分兩欄 - 填滿上半部空間
+        sections = [
+            ("設計理念", page_data.get("design_concept", "")),
+            ("機能配置", page_data.get("functional_layout", "")),
+            ("材質選擇", page_data.get("material_selection", "")),
+            ("照明設計", page_data.get("lighting_design", "")),
+            ("家具建議", page_data.get("furniture_suggestion", "")),
+            ("色彩配置", page_data.get("color_scheme", "")),
+            ("特殊亮點", page_data.get("special_features", ""))
+        ]
+        
+        # 左欄內容 - 前4個要素，佔據頁面上半部左側
+        y_pos = 260*mm  # 從標題下方開始
+        for i, (section_title, section_content) in enumerate(sections[:4]):
+            if section_content and y_pos > 150*mm:  # 確保不超過中線
+                canvas_obj.setFillColor(template_config["accent_color"])
+                canvas_obj.setFont(font_name, 13)
+                canvas_obj.drawString(col1_x, y_pos, section_title)
+                y_pos -= 6*mm
+                
+                canvas_obj.setFillColor(template_config["content_color"])
+                canvas_obj.setFont(font_name, 12)
+                content_lines = self.wrap_text(section_content, 24, canvas_obj)
+                for line in content_lines[:3]:  # 最多3行
+                    if y_pos > 150*mm:
+                        canvas_obj.drawString(col1_x, y_pos, line)
+                        y_pos -= 5*mm
+                y_pos -= 4*mm  # 段落間距
+        
+        # 右欄內容 - 後3個要素，佔據頁面上半部右側
+        y_pos = 260*mm  # 從標題下方開始
+        for i, (section_title, section_content) in enumerate(sections[4:]):
+            if section_content and y_pos > 150*mm:  # 確保不超過中線
+                canvas_obj.setFillColor(template_config["accent_color"])
+                canvas_obj.setFont(font_name, 13)
+                canvas_obj.drawString(col2_x, y_pos, section_title)
+                y_pos -= 6*mm
+                
+                canvas_obj.setFillColor(template_config["content_color"])
+                canvas_obj.setFont(font_name, 12)
+                content_lines = self.wrap_text(section_content, 24, canvas_obj)
+                for line in content_lines[:3]:  # 最多3行
+                    if y_pos > 150*mm:
+                        canvas_obj.drawString(col2_x, y_pos, line)
+                        y_pos -= 5*mm
+                y_pos -= 4*mm  # 段落間距
+        
+        # ===== 下方圖片區域 (頁面下半部，148mm以下) =====
+        if len(images_for_page) >= 3:
+            try:
+                # 上大圖 - 佔據下半部的上方區域
+                main_img = self.crop_image_for_layout(images_for_page[0], "16:9")
+                canvas_obj.drawInlineImage(main_img, 0, 79*mm, width=210*mm, height=69*mm)
+                
+                # 下方雙小圖 - 佔據頁面最底部
+                left_img = self.crop_image_for_layout(images_for_page[1], "4:3")
+                canvas_obj.drawInlineImage(left_img, 0, 0, width=105*mm, height=79*mm)
+                
+                right_img = self.crop_image_for_layout(images_for_page[2], "4:3")
+                canvas_obj.drawInlineImage(right_img, 105*mm, 0, width=105*mm, height=79*mm)
+                
+                print("版型D: 文字在上方(150-297mm)，圖片在下方(0-148mm)")
+                
+            except Exception as e:
+                print(f"版型D房間頁圖片處理錯誤: {e}")
     
     def draw_style_page(self, canvas_obj, page_data, images_for_page, template_config, font_name, layout):
         """繪製風格介紹頁 - 滿版設計"""
@@ -1454,6 +1579,6 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "PDFMagazineGenerator": "PDF雜誌生成器",
-    "PDFMagazineMaker": "PDF雜誌製作器"
+    "PDFMagazineGenerator": "PDF文件生成器",
+    "PDFMagazineMaker": "PDF文件製作器"
 }
