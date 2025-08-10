@@ -1,2 +1,0 @@
-現在我打算整理一下這個專案，請協助我處理把CLAUDE.md以及此檔案加入gitignore，以避免被上傳，更新這個專案所需的requirements.txt
-請協助撰寫readme.md，內容包括簡單的功能簡介，使用方法，如需先配置LLM，將imageprompt接到提示詞節點cliptextencode，將json_data資料正確連接，配置生成結果路徑等
