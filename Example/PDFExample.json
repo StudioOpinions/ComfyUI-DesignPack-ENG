@@ -1,0 +1,635 @@
+{
+  "id": "7940f188-bfe3-4eca-a9b2-7ba91b64a8ed",
+  "revision": 0,
+  "last_node_id": 54,
+  "last_link_id": 74,
+  "nodes": [
+    {
+      "id": 25,
+      "type": "CLIPTextEncode",
+      "pos": [
+        890,
+        -580
+      ],
+      "size": [
+        250,
+        110
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 63
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 73
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            25,
+            61
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.43",
+        "Node name for S&R": "CLIPTextEncode",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        ""
+      ]
+    },
+    {
+      "id": 27,
+      "type": "VAEDecode",
+      "pos": [
+        1450,
+        -560
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 29
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 64
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            70
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.43",
+        "Node name for S&R": "VAEDecode",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 2,
+      "type": "LoadImage",
+      "pos": [
+        -180,
+        -630
+      ],
+      "size": [
+        700,
+        650
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            71,
+            72
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.43",
+        "Node name for S&R": "LoadImage",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "floorplan-02.jpg",
+        "image"
+      ]
+    },
+    {
+      "id": 21,
+      "type": "SDXLEmptyLatentSizePicker+",
+      "pos": [
+        580,
+        -410
+      ],
+      "size": [
+        260,
+        170
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            27
+          ]
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui_essentials",
+        "ver": "9d9f4bedfc9f0321c19faf71855e228c93bd0dc9",
+        "Node name for S&R": "SDXLEmptyLatentSizePicker+",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "1088x960 (1.13)",
+        1,
+        960,
+        1088
+      ]
+    },
+    {
+      "id": 26,
+      "type": "ConditioningZeroOut",
+      "pos": [
+        880,
+        -410
+      ],
+      "size": [
+        197.712890625,
+        26
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 25
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            26
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.43",
+        "Node name for S&R": "ConditioningZeroOut",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 53,
+      "type": "PDFMagazineGenerator",
+      "pos": [
+        570,
+        -180
+      ],
+      "size": [
+        270,
+        174
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 72
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image_prompts",
+          "shape": 6,
+          "type": "STRING",
+          "links": [
+            73
+          ]
+        },
+        {
+          "name": "json_data",
+          "type": "STRING",
+          "links": [
+            74
+          ]
+        }
+      ],
+      "properties": {
+        "widget_ue_connectable": {},
+        "Node name for S&R": "PDFMagazineGenerator"
+      },
+      "widgets_values": [
+        "Gemini",
+        "自定風格",
+        "科幻未來風",
+        "頂樓加蓋",
+        "居家生活雜誌"
+      ]
+    },
+    {
+      "id": 48,
+      "type": "CheckpointLoaderSimple",
+      "pos": [
+        570,
+        -580
+      ],
+      "size": [
+        270,
+        98
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            62
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            63
+          ]
+        },
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            64
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.47",
+        "Node name for S&R": "CheckpointLoaderSimple",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "realarchvis_xlV30Lightning.safetensors"
+      ]
+    },
+    {
+      "id": 24,
+      "type": "KSampler",
+      "pos": [
+        1160,
+        -570
+      ],
+      "size": [
+        270,
+        262
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 62
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 61
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 26
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 27
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            29
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.43",
+        "Node name for S&R": "KSampler",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        1069195302594090,
+        "fixed",
+        20,
+        3,
+        "euler_ancestral",
+        "beta57",
+        1
+      ]
+    },
+    {
+      "id": 52,
+      "type": "PDFMagazineMaker",
+      "pos": [
+        880,
+        -190
+      ],
+      "size": [
+        310,
+        180
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 70
+        },
+        {
+          "name": "floorplanimage",
+          "type": "IMAGE",
+          "link": 71
+        },
+        {
+          "name": "json_data",
+          "type": "STRING",
+          "widget": {
+            "name": "json_data"
+          },
+          "link": 74
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result",
+          "type": "STRING",
+          "links": [
+            69
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "PDFMagazineMaker",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "",
+        "時尚風格",
+        "版型B-滿版圖文",
+        "cht.ttf",
+        "C:/Users/dseditor/Desktop/PPTNote/PDFOut/mag7.pdf"
+      ]
+    },
+    {
+      "id": 29,
+      "type": "ShowText|pysssss",
+      "pos": [
+        1210,
+        -190
+      ],
+      "size": [
+        320,
+        170
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "text",
+          "type": "STRING",
+          "link": 69
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "shape": 6,
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-custom-scripts",
+        "ver": "aac13aa7ce35b07d43633c3bbe654a38c00d74f5",
+        "Node name for S&R": "ShowText|pysssss",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "PDF雜誌已成功生成：C:/Users/dseditor/Desktop/PPTNote/PDFOut/mag7_20250810_124804.pdf"
+      ]
+    },
+    {
+      "id": 54,
+      "type": "Note",
+      "pos": [
+        570,
+        -730
+      ],
+      "size": [
+        290,
+        90
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "https://civitai.com/models/533040?modelVersionId=1450596\n\nRealArchVIs 3"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [
+      25,
+      25,
+      0,
+      26,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      26,
+      26,
+      0,
+      24,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      27,
+      21,
+      0,
+      24,
+      3,
+      "LATENT"
+    ],
+    [
+      29,
+      24,
+      0,
+      27,
+      0,
+      "LATENT"
+    ],
+    [
+      61,
+      25,
+      0,
+      24,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      62,
+      48,
+      0,
+      24,
+      0,
+      "MODEL"
+    ],
+    [
+      63,
+      48,
+      1,
+      25,
+      0,
+      "CLIP"
+    ],
+    [
+      64,
+      48,
+      2,
+      27,
+      1,
+      "VAE"
+    ],
+    [
+      69,
+      52,
+      0,
+      29,
+      0,
+      "STRING"
+    ],
+    [
+      70,
+      27,
+      0,
+      52,
+      0,
+      "IMAGE"
+    ],
+    [
+      71,
+      2,
+      0,
+      52,
+      1,
+      "IMAGE"
+    ],
+    [
+      72,
+      2,
+      0,
+      53,
+      0,
+      "IMAGE"
+    ],
+    [
+      73,
+      53,
+      0,
+      25,
+      1,
+      "STRING"
+    ],
+    [
+      74,
+      53,
+      1,
+      52,
+      2,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1.4641000000000006,
+      "offset": [
+        320.5863813398675,
+        764.8076103449159
+      ]
+    },
+    "ue_links": [],
+    "links_added_by_ue": [],
+    "frontendVersion": "1.24.4",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

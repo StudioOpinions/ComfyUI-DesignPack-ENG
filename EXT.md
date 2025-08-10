@@ -1,4 +1,2 @@
-版型B仍然有問題，文字換行會造成突出，請縮減每行文字換行的字數
-增加一個py檔案，以及對應的節點並註冊給init.py，這組節點控制全局的LLM使用，同時將投影片以及雜誌的Generator節點固定使用GeminiAPI以及APIKey連接LLM的邏輯做出修正，改成一個單獨的下拉式選單，以選擇LLM的種類，LLM的種類基本有三種，一種是Gemini，一種是Ollama，一種是OpenAI，模型的相關訊息都從config.json中調用
-全局LLM有幾個欄位，都是單行文字輸入，每個欄位都有預設值，分別是Ollama_Model，預設模型為gemma3:12b，Gemini_Model，預設模型為gemini-2.5-flash，Gemini_API，預設一個APIKey欄位以填入GeminiAPI，OpenAI_Model，預設模型為gpt-5-mini，OpenAI_URL，預設網址為OpenAI的API呼叫網址，OpenAI_Key，填入OpenAI的APIKey，這些數值填寫後，都會存在config.json不用再填寫，各欄位訊息不用完全填寫，但輸入後將有簡單的測試機制測試是否Generator可用(如詢問模型，你好)，會將測試的結果輸出成文字，如果可用會顯示Ollama可用、Gemini可用、OpenAI可用
-若Generator選到不可用的模型，則會直接在json提醒使用者模型不可用，而不會輸出內容
+現在我打算整理一下這個專案，請協助我處理把CLAUDE.md以及此檔案加入gitignore，以避免被上傳，更新這個專案所需的requirements.txt
+請協助撰寫readme.md，內容包括簡單的功能簡介，使用方法，如需先配置LLM，將imageprompt接到提示詞節點cliptextencode，將json_data資料正確連接，配置生成結果路徑等
