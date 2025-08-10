@@ -6,6 +6,7 @@ from PIL import Image
 import google.generativeai as genai
 import torch
 import numpy as np
+import requests
 
 class PresentationGenerator:
     def __init__(self):
@@ -40,16 +41,74 @@ class PresentationGenerator:
             config = self.load_config()
             config["gemini_api_key"] = api_key
             self.save_config(config)
+    
+    def call_ollama(self, prompt, image, model):
+        """呼叫Ollama API"""
+        try:
+            # 將圖片轉換為base64
+            buffered = io.BytesIO()
+            image.save(buffered, format="PNG")
+            img_base64 = base64.b64encode(buffered.getvalue()).decode()
+            
+            url = "http://localhost:11434/api/generate"
+            data = {
+                "model": model,
+                "prompt": prompt,
+                "images": [img_base64],
+                "stream": False
+            }
+            response = requests.post(url, json=data, timeout=180)
+            if response.status_code == 200:
+                return response.json().get("response", "")
+            else:
+                raise Exception(f"Ollama API錯誤: {response.status_code}")
+        except Exception as e:
+            raise Exception(f"Ollama呼叫失敗: {str(e)}")
+    
+    def call_openai(self, prompt, image, api_key, model, url):
+        """呼叫OpenAI API"""
+        try:
+            # 將圖片轉換為base64
+            buffered = io.BytesIO()
+            image.save(buffered, format="PNG")
+            img_base64 = base64.b64encode(buffered.getvalue()).decode()
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{img_base64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 4000
+            }
+            
+            response = requests.post(f"{url}/chat/completions", 
+                                   headers=headers, json=data, timeout=60)
+            if response.status_code == 200:
+                return response.json()["choices"][0]["message"]["content"]
+            else:
+                raise Exception(f"OpenAI API錯誤: {response.status_code}")
+        except Exception as e:
+            raise Exception(f"OpenAI呼叫失敗: {str(e)}")
     @classmethod
     def INPUT_TYPES(cls):
-        # 嘗試載入已儲存的API Key
-        instance = cls()
-        saved_key = instance.get_saved_api_key()
-        
         return {
             "required": {
-                "api_key": ("STRING", {"default": saved_key, "placeholder": "輸入Gemini API Key (會自動儲存)"}),
-                "model": (["gemini-2.5-pro", "gemini-2.5-flash"], {"default": "gemini-2.5-flash"}),
+                "llm_type": (["Gemini", "Ollama", "OpenAI"], {"default": "Gemini"}),
                 "design_style": ([
                     "現代簡約風", "工業風", "自然風", "北歐風", "日式和風", 
                     "美式鄉村風", "法式古典風", "地中海風", "復古風", "新中式風", "自定風格"
@@ -67,22 +126,33 @@ class PresentationGenerator:
     FUNCTION = "generate_presentation"
     CATEGORY = "presentation"
     
-    def generate_presentation(self, api_key, model, design_style, custom_style, custom_scene, image):
+    def generate_presentation(self, llm_type, design_style, custom_style, custom_scene, image):
         try:
-            # 儲存API Key以供下次使用
-            if api_key and api_key != self.get_saved_api_key():
-                self.save_api_key(api_key)
-                print("API Key已儲存")
+            # 載入配置
+            config = self.load_config()
             
-            # 如果沒有輸入API Key，嘗試使用儲存的Key
-            if not api_key:
-                api_key = self.get_saved_api_key()
+            # 檢查選擇的LLM是否可用
+            if llm_type == "Gemini":
+                api_key = config.get("gemini_api")
+                model = config.get("gemini_model", "gemini-2.5-flash")
                 if not api_key:
-                    return (["錯誤: 請輸入Gemini API Key"], "錯誤: 請輸入Gemini API Key")
-            
-            # 配置 Gemini API
-            genai.configure(api_key=api_key)
-            model_instance = genai.GenerativeModel(model)
+                    return (["錯誤: Gemini API Key未配置，請先使用全局LLM管理器設定"], "錯誤: Gemini API Key未配置")
+                genai.configure(api_key=api_key)
+                model_instance = genai.GenerativeModel(model)
+            elif llm_type == "Ollama":
+                model = config.get("ollama_model", "gemma2:12b")
+                # Ollama的模型實例化會在請求時處理
+                model_instance = None
+            elif llm_type == "OpenAI":
+                api_key = config.get("openai_key")
+                model = config.get("openai_model", "gpt-4o-mini")
+                url = config.get("openai_url", "https://api.openai.com/v1")
+                if not api_key:
+                    return (["錯誤: OpenAI API Key未配置，請先使用全局LLM管理器設定"], "錯誤: OpenAI API Key未配置")
+                # OpenAI的模型實例化會在請求時處理
+                model_instance = None
+            else:
+                return (["錯誤: 不支援的LLM類型"], "錯誤: 不支援的LLM類型")
             
             # 轉換圖片格式
             if isinstance(image, torch.Tensor):
@@ -155,11 +225,14 @@ JSON結構要求：
 請直接輸出JSON格式，不需要其他說明文字。
 """
             
-            # 發送請求給 Gemini
-            response = model_instance.generate_content([prompt, pil_image])
-            
-            # 解析回應
-            response_text = response.text.strip()
+            # 根據LLM類型發送請求
+            if llm_type == "Gemini":
+                response = model_instance.generate_content([prompt, pil_image])
+                response_text = response.text.strip()
+            elif llm_type == "Ollama":
+                response_text = self.call_ollama(prompt, pil_image, model)
+            elif llm_type == "OpenAI":
+                response_text = self.call_openai(prompt, pil_image, api_key, model, url)
             
             # 清理回應文字，移除可能的 markdown 標記
             if response_text.startswith("```json"):
@@ -173,7 +246,27 @@ JSON結構要求：
             # 提取圖片提示詞列表
             image_prompts = []
             for item in presentation_data:
-                image_prompts.append(item.get("image", ""))
+                if isinstance(item, dict):
+                    prompt = item.get("image", "")
+                    # 確保提示詞是字符串格式
+                    if isinstance(prompt, str):
+                        image_prompts.append(prompt)
+                    elif isinstance(prompt, dict):
+                        # 如果是字典，嘗試提取有效的字符串值
+                        if "prompt" in prompt:
+                            image_prompts.append(str(prompt["prompt"]))
+                        else:
+                            # 取第一個字符串值
+                            for value in prompt.values():
+                                if isinstance(value, str) and value.strip():
+                                    image_prompts.append(value)
+                                    break
+                            else:
+                                image_prompts.append("interior design, modern style")
+                    else:
+                        image_prompts.append(str(prompt) if prompt else "interior design")
+                else:
+                    image_prompts.append("interior design")
             
             # 返回完整的 JSON 字串
             json_string = json.dumps(presentation_data, ensure_ascii=False, indent=2)

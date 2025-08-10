@@ -7,6 +7,7 @@ from PIL import Image
 import google.generativeai as genai
 import torch
 import numpy as np
+import requests
 
 class PDFMagazineGenerator:
     def __init__(self):
@@ -41,17 +42,75 @@ class PDFMagazineGenerator:
             config = self.load_config()
             config["gemini_api_key"] = api_key
             self.save_config(config)
+    
+    def call_ollama(self, prompt, image, model):
+        """呼叫Ollama API"""
+        try:
+            # 將圖片轉換為base64
+            buffered = io.BytesIO()
+            image.save(buffered, format="PNG")
+            img_base64 = base64.b64encode(buffered.getvalue()).decode()
+            
+            url = "http://localhost:11434/api/generate"
+            data = {
+                "model": model,
+                "prompt": prompt,
+                "images": [img_base64],
+                "stream": False
+            }
+            response = requests.post(url, json=data, timeout=180)
+            if response.status_code == 200:
+                return response.json().get("response", "")
+            else:
+                raise Exception(f"Ollama API錯誤: {response.status_code}")
+        except Exception as e:
+            raise Exception(f"Ollama呼叫失敗: {str(e)}")
+    
+    def call_openai(self, prompt, image, api_key, model, url):
+        """呼叫OpenAI API"""
+        try:
+            # 將圖片轉換為base64
+            buffered = io.BytesIO()
+            image.save(buffered, format="PNG")
+            img_base64 = base64.b64encode(buffered.getvalue()).decode()
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{img_base64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 4000
+            }
+            
+            response = requests.post(f"{url}/chat/completions", 
+                                   headers=headers, json=data, timeout=60)
+            if response.status_code == 200:
+                return response.json()["choices"][0]["message"]["content"]
+            else:
+                raise Exception(f"OpenAI API錯誤: {response.status_code}")
+        except Exception as e:
+            raise Exception(f"OpenAI呼叫失敗: {str(e)}")
 
     @classmethod
     def INPUT_TYPES(cls):
-        # 嘗試載入已儲存的API Key
-        instance = cls()
-        saved_key = instance.get_saved_api_key()
-        
         return {
             "required": {
-                "api_key": ("STRING", {"default": saved_key, "placeholder": "輸入Gemini API Key (會自動儲存)"}),
-                "model": (["gemini-2.5-pro", "gemini-2.5-flash"], {"default": "gemini-2.5-flash"}),
+                "llm_type": (["Gemini", "Ollama", "OpenAI"], {"default": "Gemini"}),
                 "design_style": ([
                     "現代簡約風", "工業風", "自然風", "北歐風", "日式和風", 
                     "美式鄉村風", "法式古典風", "地中海風", "復古風", "新中式風", "自定風格"
@@ -72,22 +131,33 @@ class PDFMagazineGenerator:
     FUNCTION = "generate_pdf_magazine"
     CATEGORY = "pdf_magazine"
     
-    def generate_pdf_magazine(self, api_key, model, design_style, custom_style, custom_scene, magazine_style, image):
+    def generate_pdf_magazine(self, llm_type, design_style, custom_style, custom_scene, magazine_style, image):
         try:
-            # 儲存API Key以供下次使用
-            if api_key and api_key != self.get_saved_api_key():
-                self.save_api_key(api_key)
-                print("API Key已儲存")
+            # 載入配置
+            config = self.load_config()
             
-            # 如果沒有輸入API Key，嘗試使用儲存的Key
-            if not api_key:
-                api_key = self.get_saved_api_key()
+            # 檢查選擇的LLM是否可用
+            if llm_type == "Gemini":
+                api_key = config.get("gemini_api")
+                model = config.get("gemini_model", "gemini-2.5-flash")
                 if not api_key:
-                    return (["錯誤: 請輸入Gemini API Key"], "錯誤: 請輸入Gemini API Key")
-            
-            # 配置 Gemini API
-            genai.configure(api_key=api_key)
-            model_instance = genai.GenerativeModel(model)
+                    return (["錯誤: Gemini API Key未配置，請先使用全局LLM管理器設定"], "錯誤: Gemini API Key未配置")
+                genai.configure(api_key=api_key)
+                model_instance = genai.GenerativeModel(model)
+            elif llm_type == "Ollama":
+                model = config.get("ollama_model", "gemma2:12b")
+                # Ollama的模型實例化會在請求時處理
+                model_instance = None
+            elif llm_type == "OpenAI":
+                api_key = config.get("openai_key")
+                model = config.get("openai_model", "gpt-4o-mini")
+                url = config.get("openai_url", "https://api.openai.com/v1")
+                if not api_key:
+                    return (["錯誤: OpenAI API Key未配置，請先使用全局LLM管理器設定"], "錯誤: OpenAI API Key未配置")
+                # OpenAI的模型實例化會在請求時處理
+                model_instance = None
+            else:
+                return (["錯誤: 不支援的LLM類型"], "錯誤: 不支援的LLM類型")
             
             # 轉換圖片格式
             if isinstance(image, torch.Tensor):
@@ -191,11 +261,14 @@ JSON結構要求：
 ]
 """
             
-            # 發送請求給 Gemini
-            response = model_instance.generate_content([prompt, pil_image])
-            
-            # 解析回應
-            response_text = response.text.strip()
+            # 根據LLM類型發送請求
+            if llm_type == "Gemini":
+                response = model_instance.generate_content([prompt, pil_image])
+                response_text = response.text.strip()
+            elif llm_type == "Ollama":
+                response_text = self.call_ollama(prompt, pil_image, model)
+            elif llm_type == "OpenAI":
+                response_text = self.call_openai(prompt, pil_image, api_key, model, url)
             
             # 清理回應文字，移除可能的 markdown 標記和其他格式
             if response_text.startswith("```json"):
@@ -232,16 +305,48 @@ JSON結構要求：
             for page in magazine_data:
                 if isinstance(page, dict):
                     if "image_prompt" in page:
-                        image_prompts.append(page["image_prompt"])
+                        prompt = page["image_prompt"]
+                        # 確保提示詞是字符串格式
+                        if isinstance(prompt, str):
+                            image_prompts.append(prompt)
+                        elif isinstance(prompt, dict):
+                            # 如果是字典，嘗試提取有效的字符串值
+                            if "prompt" in prompt:
+                                image_prompts.append(str(prompt["prompt"]))
+                            else:
+                                # 取第一個字符串值
+                                for value in prompt.values():
+                                    if isinstance(value, str) and value.strip():
+                                        image_prompts.append(value)
+                                        break
+                                else:
+                                    image_prompts.append("interior design, modern style")
+                        else:
+                            image_prompts.append(str(prompt) if prompt else "interior design")
                     elif "image_prompts" in page:
                         # 房間詳細頁的多圖片提示詞
                         room_prompts = page["image_prompts"]
                         if isinstance(room_prompts, dict):
-                            image_prompts.append(room_prompts.get("main_view", ""))
-                            image_prompts.append(room_prompts.get("detail_view", ""))
-                            image_prompts.append(room_prompts.get("corner_view", ""))
+                            for key in ["main_view", "detail_view", "corner_view"]:
+                                prompt = room_prompts.get(key, "")
+                                if isinstance(prompt, str) and prompt.strip():
+                                    image_prompts.append(prompt)
+                                elif prompt:
+                                    image_prompts.append(str(prompt))
                         elif isinstance(room_prompts, list):
-                            image_prompts.extend(room_prompts)
+                            for prompt in room_prompts:
+                                if isinstance(prompt, str):
+                                    image_prompts.append(prompt)
+                                elif isinstance(prompt, dict):
+                                    # 從字典中提取字符串值
+                                    for value in prompt.values():
+                                        if isinstance(value, str) and value.strip():
+                                            image_prompts.append(value)
+                                            break
+                                    else:
+                                        image_prompts.append("interior design, modern style")
+                                else:
+                                    image_prompts.append(str(prompt) if prompt else "interior design")
             
             # 返回完整的 JSON 字串
             json_string = json.dumps(magazine_data, ensure_ascii=False, indent=2)
@@ -949,8 +1054,8 @@ class PDFMagazineMaker:
         design_concept = page_data.get("design_concept", "")
         
         # 動態計算左上角文字框大小 - 修正文字重疊問題
-        title_lines = self.wrap_text(title, 15, canvas_obj)  # 縮短每行字數避免重疊
-        concept_lines = self.wrap_text(design_concept, 20, canvas_obj)  # 進一步縮短行長度
+        title_lines = self.wrap_text(title, 12, canvas_obj)  # 進一步縮短每行字數避免重疊
+        concept_lines = self.wrap_text(design_concept, 16, canvas_obj)  # 進一步縮短行長度
         
         # 計算所需高度：標題 + 間距 + 設計理念標題 + 內容 + 充足邊距
         title_height = len(title_lines) * 8*mm  # 進一步增加標題行距
@@ -1017,56 +1122,56 @@ class PDFMagazineMaker:
                 max_lines_right += 1 + len(content_lines[:2])
         
         total_lines = max(max_lines_left, max_lines_right + 1)  # +1 for title
-        box_height = total_lines * 5.5*mm + 35*mm  # 增加行距和邊距
-        box_width = 150*mm  # 再次增大寬度提供更好空間
+        box_height = max(total_lines * 6*mm + 50*mm, 120*mm)  # 大幅增加高度，確保最小120mm
+        box_width = 160*mm  # 增大寬度
         
-        # 右下角透明文字區域 - 更大更舒適的區域
+        # 右下角透明文字區域 - 調整位置，不要太偏右
         canvas_obj.setFillColor(colors.black)
-        canvas_obj.setFillAlpha(0.82)  # 稍微調整透明度
-        canvas_obj.rect(210*mm-box_width-8*mm, 20*mm, box_width, box_height, fill=1, stroke=0)
+        canvas_obj.setFillAlpha(0.85)  # 提高透明度增加可讀性
+        canvas_obj.rect(40*mm, 15*mm, box_width, box_height, fill=1, stroke=0)  # 調整X位置從右側移到中央偏右
         canvas_obj.setFillAlpha(1)
         
-        # 設計特色標題 - 改善視覺層次
-        margin_right = 210*mm-box_width-3*mm  # 增加左邊距
+        # 設計特色標題 - 調整位置
+        margin_right = 50*mm  # 簡化為固定邊距
         canvas_obj.setFillColor(colors.white)
-        canvas_obj.setFont(font_name, 14)  # 增大標題字體
-        y_pos = 20*mm + box_height - 20*mm  # 增加上邊距
+        canvas_obj.setFont(font_name, 16)  # 增大標題字體
+        y_pos = 15*mm + box_height - 15*mm  # 調整Y位置計算
         canvas_obj.drawString(margin_right, y_pos, "設計特色")
-        y_pos -= 12*mm  # 增加標題和內容間距
+        y_pos -= 15*mm  # 增加標題和內容間距
         
-        # 左欄內容 - 修正文字重疊問題
+        # 左欄內容 - 修正文字重疊問題，增加可顯示空間
         left_x = margin_right
         left_y = y_pos
         for section_title, section_content in left_sections:
-            if section_content and left_y > 40*mm:
-                canvas_obj.setFont(font_name, 11)  # 稍微縮小標題字體避免重疊
+            if section_content and left_y > 25*mm:  # 降低底部限制
+                canvas_obj.setFont(font_name, 12)  # 增大標題字體提高可讀性
                 canvas_obj.drawString(left_x, left_y, f"{section_title}:")
-                left_y -= 6*mm  # 增加標題和內容間距
+                left_y -= 7*mm  # 適當的標題和內容間距
                 
-                canvas_obj.setFont(font_name, 10)  # 縮小內容字體
-                content_lines = self.wrap_text(section_content, 16, canvas_obj)  # 縮短行長度避免重疊
-                for line in content_lines[:2]:  # 最多2行
-                    if left_y > 35*mm:
+                canvas_obj.setFont(font_name, 11)  # 增大內容字體提高可讀性
+                content_lines = self.wrap_text(section_content, 16, canvas_obj)  # 減少每行字數避免突出
+                for line in content_lines[:3]:  # 增加到3行
+                    if left_y > 20*mm:  # 降低底部限制
                         canvas_obj.drawString(left_x, left_y, line)
-                        left_y -= 6*mm  # 增加行距避免重疊
-                left_y -= 5*mm  # 增加段落間距
+                        left_y -= 6*mm  # 適當行距
+                left_y -= 6*mm  # 適當段落間距
         
-        # 右欄內容 - 修正文字重疊問題
-        right_x = margin_right + 65*mm  # 調整欄位間距
+        # 右欄內容 - 修正文字重疊問題，增加可顯示空間
+        right_x = margin_right + 75*mm  # 調整欄位間距，給左欄更多空間
         right_y = y_pos
         for section_title, section_content in right_sections:
-            if section_content and right_y > 40*mm:
-                canvas_obj.setFont(font_name, 11)  # 稍微縮小標題字體避免重疊
+            if section_content and right_y > 25*mm:  # 降低底部限制
+                canvas_obj.setFont(font_name, 12)  # 增大標題字體提高可讀性
                 canvas_obj.drawString(right_x, right_y, f"{section_title}:")
-                right_y -= 6*mm  # 增加標題和內容間距
+                right_y -= 7*mm  # 適當的標題和內容間距
                 
-                canvas_obj.setFont(font_name, 10)  # 縮小內容字體
-                content_lines = self.wrap_text(section_content, 16, canvas_obj)  # 縮短行長度避免重疊
-                for line in content_lines[:2]:  # 最多2行
-                    if right_y > 35*mm:
+                canvas_obj.setFont(font_name, 11)  # 增大內容字體提高可讀性
+                content_lines = self.wrap_text(section_content, 16, canvas_obj)  # 減少每行字數避免突出
+                for line in content_lines[:3]:  # 增加到3行
+                    if right_y > 20*mm:  # 降低底部限制
                         canvas_obj.drawString(right_x, right_y, line)
-                        right_y -= 6*mm  # 增加行距避免重疊
-                right_y -= 5*mm  # 增加段落間距
+                        right_y -= 6*mm  # 適當行距
+                right_y -= 6*mm  # 適當段落間距
     
     def draw_room_layout_c(self, canvas_obj, page_data, images_for_page, template_config, font_name):
         """版型C: 藝術拼貼 - 不規則圖片排列，設計理念覆蓋，其他文字底部排列"""
@@ -1203,16 +1308,22 @@ class PDFMagazineMaker:
         """版型D: 反轉經典 - 真正的上方文字，下方圖片佈局"""
         
         # ===== 上方文字區域 (頁面上半部) =====
-        margin = 15*mm
-        col_width = 85*mm
+        margin = 10*mm
+        col_width = 90*mm  # 增加欄寬
         col1_x = margin
-        col2_x = margin + col_width + 15*mm
+        col2_x = margin + col_width + 10*mm  # 減少欄間距以增加可用空間
         
-        # 房間標題 - 頁面最上方
+        # 房間標題 - 頁面最上方，支援換行
         canvas_obj.setFillColor(template_config["title_color"])
-        canvas_obj.setFont(font_name, 22)
+        canvas_obj.setFont(font_name, 20)  # 稍微縮小以適應換行
         title = page_data.get("main_title", "")
-        canvas_obj.drawString(col1_x, 280*mm, title)
+        title_lines = self.wrap_text(title, 25, canvas_obj)  # 限制標題字數避免過長
+        y_title = 280*mm
+        for i, line in enumerate(title_lines[:2]):  # 最多2行標題
+            canvas_obj.drawString(col1_x, y_title - i*8*mm, line)
+        
+        # 調整後續內容的起始位置
+        title_offset = len(title_lines[:2]) * 8*mm
         
         # 設計內容分兩欄 - 填滿上半部空間
         sections = [
@@ -1226,7 +1337,7 @@ class PDFMagazineMaker:
         ]
         
         # 左欄內容 - 前4個要素，佔據頁面上半部左側
-        y_pos = 260*mm  # 從標題下方開始
+        y_pos = 260*mm - title_offset  # 從標題下方開始，考慮標題高度
         for i, (section_title, section_content) in enumerate(sections[:4]):
             if section_content and y_pos > 150*mm:  # 確保不超過中線
                 canvas_obj.setFillColor(template_config["accent_color"])
@@ -1235,8 +1346,8 @@ class PDFMagazineMaker:
                 y_pos -= 6*mm
                 
                 canvas_obj.setFillColor(template_config["content_color"])
-                canvas_obj.setFont(font_name, 12)
-                content_lines = self.wrap_text(section_content, 24, canvas_obj)
+                canvas_obj.setFont(font_name, 11)  # 稍微縮小字體以配合較窄欄位
+                content_lines = self.wrap_text(section_content, 18, canvas_obj)  # 減少每行字數以配合欄寬
                 for line in content_lines[:3]:  # 最多3行
                     if y_pos > 150*mm:
                         canvas_obj.drawString(col1_x, y_pos, line)
@@ -1244,7 +1355,7 @@ class PDFMagazineMaker:
                 y_pos -= 4*mm  # 段落間距
         
         # 右欄內容 - 後3個要素，佔據頁面上半部右側
-        y_pos = 260*mm  # 從標題下方開始
+        y_pos = 260*mm - title_offset  # 從標題下方開始，考慮標題高度
         for i, (section_title, section_content) in enumerate(sections[4:]):
             if section_content and y_pos > 150*mm:  # 確保不超過中線
                 canvas_obj.setFillColor(template_config["accent_color"])
@@ -1253,8 +1364,8 @@ class PDFMagazineMaker:
                 y_pos -= 6*mm
                 
                 canvas_obj.setFillColor(template_config["content_color"])
-                canvas_obj.setFont(font_name, 12)
-                content_lines = self.wrap_text(section_content, 24, canvas_obj)
+                canvas_obj.setFont(font_name, 11)  # 稍微縮小字體以配合較窄欄位
+                content_lines = self.wrap_text(section_content, 18, canvas_obj)  # 減少每行字數以配合欄寬
                 for line in content_lines[:3]:  # 最多3行
                     if y_pos > 150*mm:
                         canvas_obj.drawString(col2_x, y_pos, line)
