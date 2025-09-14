@@ -85,6 +85,7 @@ ComfyUI-DesignPack/
 ├── __init__.py
 ├── presentation_generator.py
 ├── presentation_maker.py
+├── pdf_magazine_generator.py
 ├── llm_manager.py
 ├── requirements.txt
 ├── config.json (auto-generated)
