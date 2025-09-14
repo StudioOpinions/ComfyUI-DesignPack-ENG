@@ -266,10 +266,10 @@
       },
       "widgets_values": [
         "Gemini",
-        "自定風格",
-        "科幻未來風",
-        "頂樓加蓋",
-        "居家生活雜誌"
+        "Custom Style",
+        "Sci-Fi Futuristic Style",
+        "Rooftop Addition",
+        "Home Living Magazine"
       ]
     },
     {
@@ -430,8 +430,8 @@
       },
       "widgets_values": [
         "",
-        "時尚風格",
-        "版型B-滿版圖文",
+        "Fashion Style",
+        "Layout B - Full-Page Image and Text",
         "cht.ttf",
         "C:/Users/dseditor/Desktop/PPTNote/PDFOut/mag7.pdf"
       ]
@@ -472,7 +472,7 @@
         "widget_ue_connectable": {}
       },
       "widgets_values": [
-        "PDF雜誌已成功生成：C:/Users/dseditor/Desktop/PPTNote/PDFOut/mag7_20250810_124804.pdf"
+        "PDF magazine generated successfully: C:/Users/dseditor/Desktop/PPTNote/PDFOut/mag7_20250810_124804.pdf"
       ]
     },
     {

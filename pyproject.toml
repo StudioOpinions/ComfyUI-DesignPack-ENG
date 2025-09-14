@@ -1,6 +1,6 @@
 [project]
 name = "designpack"
-description = "A ComfyUI custom node package for generating professional interior design presentations using AI. This package integrates with Gemini/Ollama/OpenAI API to analyze floor plans and automatically generate PowerPoint presentations and PDF with AI-generated content and images. (Currently Support Chinese Only)"
+description = "A ComfyUI custom node package for generating professional interior design presentations using AI. This package integrates with Gemini/Ollama/OpenAI APIs to analyze floor plans and automatically generate PowerPoint presentations and PDFs with AI-generated content and images."
 version = "1.0.0"
 license = {file = "LICENSE"}
 dependencies = ["google-generativeai", "python-pptx", "pillow", "numpy", "torch", "requests", "reportlab"]

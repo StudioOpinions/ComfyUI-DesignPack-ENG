@@ -8,7 +8,7 @@ class LLMManager:
         self.config_file = os.path.join(os.path.dirname(__file__), "config.json")
     
     def load_config(self):
-        """載入配置檔案"""
+        """Load configuration file"""
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
@@ -18,45 +18,45 @@ class LLMManager:
         return {}
     
     def save_config(self, config):
-        """儲存配置檔案"""
+        """Save configuration file"""
         try:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"儲存配置失敗: {e}")
+            print(f"Failed to save config: {e}")
     
     def test_ollama(self, model):
-        """測試Ollama連接"""
+        """Test Ollama connection"""
         try:
             url = "http://localhost:11434/api/generate"
             data = {
                 "model": model,
-                "prompt": "你好",
+                "prompt": "hello",
                 "stream": False
             }
             response = requests.post(url, json=data, timeout=10)
             if response.status_code == 200:
-                return True, "Ollama可用"
+                return True, "Ollama available"
             else:
-                return False, f"Ollama連接失敗: HTTP {response.status_code}"
+                return False, f"Ollama connection failed: HTTP {response.status_code}"
         except Exception as e:
-            return False, f"Ollama測試失敗: {str(e)}"
+            return False, f"Ollama test failed: {str(e)}"
     
     def test_gemini(self, api_key, model):
-        """測試Gemini連接"""
+        """Test Gemini connection"""
         try:
             genai.configure(api_key=api_key)
             model_instance = genai.GenerativeModel(model)
-            response = model_instance.generate_content("你好")
+            response = model_instance.generate_content("hello")
             if response.text:
-                return True, "Gemini可用"
+                return True, "Gemini available"
             else:
-                return False, "Gemini回應為空"
+                return False, "Gemini response was empty"
         except Exception as e:
-            return False, f"Gemini測試失敗: {str(e)}"
+            return False, f"Gemini test failed: {str(e)}"
     
     def test_openai(self, api_key, model, url):
-        """測試OpenAI連接"""
+        """Test OpenAI connection"""
         try:
             headers = {
                 "Authorization": f"Bearer {api_key}",
@@ -64,22 +64,22 @@ class LLMManager:
             }
             data = {
                 "model": model,
-                "messages": [{"role": "user", "content": "你好"}],
+                "messages": [{"role": "user", "content": "hello"}],
                 "max_tokens": 50
             }
             
             response = requests.post(f"{url}/chat/completions", 
                                    headers=headers, json=data, timeout=10)
             if response.status_code == 200:
-                return True, "OpenAI可用"
+                return True, "OpenAI available"
             else:
-                return False, f"OpenAI連接失敗: HTTP {response.status_code}"
+                return False, f"OpenAI connection failed: HTTP {response.status_code}"
         except Exception as e:
-            return False, f"OpenAI測試失敗: {str(e)}"
+            return False, f"OpenAI test failed: {str(e)}"
 
     @classmethod
     def INPUT_TYPES(cls):
-        # 載入已儲存的配置
+        # Load saved configuration
         instance = cls()
         config = instance.load_config()
         
@@ -87,11 +87,11 @@ class LLMManager:
             "required": {
                 "ollama_model": ("STRING", {
                     "default": config.get("ollama_model", "gemma3:12b"),
-                    "placeholder": "Ollama模型名稱"
+                    "placeholder": "Ollama model name"
                 }),
                 "gemini_model": ("STRING", {
                     "default": config.get("gemini_model", "gemini-2.5-flash"),
-                    "placeholder": "Gemini模型名稱"
+                    "placeholder": "Gemini model name"
                 }),
                 "gemini_api": ("STRING", {
                     "default": config.get("gemini_api", ""),
@@ -99,7 +99,7 @@ class LLMManager:
                 }),
                 "openai_model": ("STRING", {
                     "default": config.get("openai_model", "gpt-4o-mini"),
-                    "placeholder": "OpenAI模型名稱"
+                    "placeholder": "OpenAI model name"
                 }),
                 "openai_url": ("STRING", {
                     "default": config.get("openai_url", "https://api.openai.com/v1"),
@@ -121,7 +121,7 @@ class LLMManager:
     def test_llm_connections(self, ollama_model, gemini_model, gemini_api, 
                            openai_model, openai_url, openai_key):
         try:
-            # 保存配置
+            # Save configuration
             config = {
                 "ollama_model": ollama_model,
                 "gemini_model": gemini_model,
@@ -134,17 +134,17 @@ class LLMManager:
             
             results = []
             
-            # 測試Ollama
+            # Test Ollama
             if ollama_model:
                 success, message = self.test_ollama(ollama_model)
                 results.append(f"Ollama ({ollama_model}): {message}")
             
-            # 測試Gemini
+            # Test Gemini
             if gemini_api and gemini_model:
                 success, message = self.test_gemini(gemini_api, gemini_model)
                 results.append(f"Gemini ({gemini_model}): {message}")
             
-            # 測試OpenAI
+            # Test OpenAI
             if openai_key and openai_model and openai_url:
                 success, message = self.test_openai(openai_key, openai_model, openai_url)
                 results.append(f"OpenAI ({openai_model}): {message}")
@@ -152,12 +152,12 @@ class LLMManager:
             return ("\n".join(results),)
             
         except Exception as e:
-            return (f"測試過程發生錯誤: {str(e)}",)
+            return (f"Error occurred during testing: {str(e)}",)
 
 NODE_CLASS_MAPPINGS = {
     "LLMManager": LLMManager
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "LLMManager": "全局LLM管理器"
+    "LLMManager": "Global LLM Manager"
 }
