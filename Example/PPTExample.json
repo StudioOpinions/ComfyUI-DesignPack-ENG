@@ -316,7 +316,7 @@
         "widget_ue_connectable": {}
       },
       "widgets_values": [
-        "簡報已成功生成：C:/Users/dseditor/Desktop/PPTNote/Outppt.pptx"
+        "Presentation generated successfully: C:/Users/dseditor/Desktop/PPTNote/Outppt.pptx"
       ]
     },
     {
@@ -406,9 +406,9 @@
       },
       "widgets_values": [
         "Gemini",
-        "自定風格",
-        "韓系奶油風",
-        "民宿"
+        "Custom Style",
+        "Korean Cream Style",
+        "Guesthouse"
       ]
     },
     {
@@ -455,7 +455,7 @@
       },
       "widgets_values": [
         "",
-        "溫馨居家",
+        "Cozy Home",
         "cht.ttf",
         "C:/Users/dseditor/Desktop/PPTNote/Outppt.pptx"
       ]
